@@ -1,0 +1,240 @@
+import DashboardLayout from "@/components/dashboard/DashboardLayout";
+import { useState, useEffect, useMemo } from "react";
+import { Tag, Plus } from "lucide-react";
+
+import { ownerLogo, ownerMenu } from "@/components/config/Menu";
+import { logout, getUser } from "@/lib/auth";
+
+import { searchInObject } from "@/lib/utils/AdminUtils";
+
+import DeleteModal from "@/components/admin/DeleteModal";
+import ActionButtons from "@/components/admin/ActionButtons";
+import EditModal, { type FormField } from "@/components/admin/EditModal";
+
+import PageHeader from "@/components/admin/PageHeader";
+import TableCard from "@/components/admin/TableCard";
+import DataTable from "@/components/admin/DataTable";
+import MobileCardList from "@/components/admin/MobileCardList";
+import MobileCard from "@/components/admin/MobileCard";
+
+import { useToast } from "@/components/ui/Toast";
+
+/* ================= TYPES ================= */
+interface Category {
+  id: number;
+  categoryName: string;
+  serviceCount: number;
+  status: "active" | "inactive";
+}
+
+/* ================= DUMMY DATA ================= */
+const DUMMY_CATEGORIES: Category[] = [
+  { id: 1, categoryName: "Haircut",   serviceCount: 2, status: "active"   },
+  { id: 2, categoryName: "Grooming",  serviceCount: 1, status: "active"   },
+  { id: 3, categoryName: "Coloring",  serviceCount: 1, status: "inactive" },
+  { id: 4, categoryName: "Treatment", serviceCount: 1, status: "active"   },
+  { id: 5, categoryName: "Package",   serviceCount: 1, status: "inactive" },
+];
+
+export default function OwnerCategories() {
+  const toast = useToast();
+
+  const [categories, setCategories]   = useState<Category[]>([]);
+  const [searchQuery, setSearchQuery] = useState("");
+
+  const [showDeleteModal, setShowDeleteModal]   = useState(false);
+  const [showEditModal, setShowEditModal]       = useState(false);
+  const [showAddModal, setShowAddModal]         = useState(false);
+  const [selectedCategory, setSelectedCategory] = useState<Category | null>(null);
+  const [isLoading, setIsLoading]               = useState(false);
+
+  const currentUser = getUser();
+
+  useEffect(() => { setCategories(DUMMY_CATEGORIES); }, []);
+
+  /* ================= FILTER ================= */
+  const filteredCategories = useMemo(() => {
+    return categories.filter((cat) => searchInObject(cat, searchQuery, ["categoryName"]));
+  }, [categories, searchQuery]);
+
+  /* ================= FORM FIELDS ================= */
+  const formFields: FormField[] = [
+    {
+      name: "categoryName",
+      label: "Category Name",
+      type: "text",
+      placeholder: "e.g., Haircut",
+      required: true,
+      validation: (value) => value.length >= 2 ? null : "Category name must be at least 2 characters",
+    },
+    {
+      name: "status",
+      label: "Status",
+      type: "select",
+      required: true,
+      options: [
+        { value: "active",   label: "Active"   },
+        { value: "inactive", label: "Inactive" },
+      ],
+    },
+  ];
+
+  /* ================= ADD HANDLER ================= */
+  const handleAddClick = () => setShowAddModal(true);
+
+  const handleSaveAdd = async (data: Record<string, any>) => {
+    setIsLoading(true);
+    try {
+      await new Promise((resolve) => setTimeout(resolve, 1200));
+      const newId = Math.max(...categories.map((c) => c.id), 0) + 1;
+      setCategories((prev) => [...prev, { id: newId, categoryName: data.categoryName, serviceCount: 0, status: data.status }]);
+      setShowAddModal(false);
+      toast.success("Category Added", `${data.categoryName} has been added successfully.`);
+    } catch {
+      toast.error("Add Failed", "Something went wrong. Please try again.");
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  /* ================= EDIT HANDLER ================= */
+  const handleEditClick = (category: Category) => {
+    setSelectedCategory(category);
+    setShowEditModal(true);
+  };
+
+  const handleSaveEdit = async (data: Record<string, any>) => {
+    setIsLoading(true);
+    try {
+      await new Promise((resolve) => setTimeout(resolve, 1200));
+      setCategories((prev) =>
+        prev.map((cat) =>
+          cat.id === selectedCategory?.id ? { ...cat, categoryName: data.categoryName, status: data.status } : cat
+        )
+      );
+      setShowEditModal(false);
+      toast.success("Category Updated", `${data.categoryName} has been updated successfully.`);
+      setSelectedCategory(null);
+    } catch {
+      toast.error("Update Failed", "Something went wrong. Please try again.");
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  /* ================= DELETE HANDLER ================= */
+  const handleDeleteClick = (category: Category) => {
+    setSelectedCategory(category);
+    setShowDeleteModal(true);
+  };
+
+  const handleConfirmDelete = () => {
+    if (!selectedCategory) return;
+    const name = selectedCategory.categoryName;
+    setCategories((prev) => prev.filter((c) => c.id !== selectedCategory.id));
+    setShowDeleteModal(false);
+    setSelectedCategory(null);
+    toast.success("Category Deleted", `${name} has been removed.`);
+  };
+
+  const handleCancelDelete = () => {
+    setShowDeleteModal(false);
+    setSelectedCategory(null);
+  };
+
+  /* ================= TABLE COLUMNS ================= */
+  const columns = [
+    {
+      key: "no",
+      header: "No",
+      headerClassName: "text-left w-16",
+      render: (cat: Category) => {
+        const index = filteredCategories.findIndex((c) => c.id === cat.id);
+        return <span className="text-[#B8B8B8]">{index + 1}</span>;
+      },
+    },
+    { key: "categoryName", header: "Category Name", render: (cat: Category) => <span className="text-white font-semibold">{cat.categoryName}</span> },
+    {
+      key: "serviceCount",
+      header: "Services",
+      render: (cat: Category) => (
+        <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-[#D4AF37]/10 text-[#D4AF37] border border-[#D4AF37]/20">
+          {cat.serviceCount} service{cat.serviceCount !== 1 ? "s" : ""}
+        </span>
+      ),
+    },
+    {
+      key: "status",
+      header: "Status",
+      render: (cat: Category) => (
+        <span className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-medium ${cat.status === "active" ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20" : "bg-zinc-700/50 text-zinc-400 border border-zinc-600"}`}>
+          {cat.status === "active" ? "Active" : "Inactive"}
+        </span>
+      ),
+    },
+    {
+      key: "actions",
+      header: "Actions",
+      headerClassName: "text-right",
+      className: "text-right",
+      render: (cat: Category) => (
+        <ActionButtons actions={[
+          { type: "edit",   onClick: () => handleEditClick(cat)   },
+          { type: "delete", onClick: () => handleDeleteClick(cat) },
+        ]} />
+      ),
+    },
+  ];
+
+  return (
+    <DashboardLayout
+      title="Service Categories"
+      subtitle="Manage all service categories"
+      showSidebar
+      menuItems={ownerMenu}
+      logo={ownerLogo}
+      userProfile={currentUser ?? { name: "owner", email: "owner@cutbro.com", role: "owner" }}
+      showNotification
+      notificationCount={3}
+      onLogout={logout}
+    >
+      <div className="w-full space-y-6 lg:space-y-8">
+        <PageHeader actionButton={{ label: "Add Category", onClick: handleAddClick, icon: Plus }} title={""} />
+
+        <TableCard
+          searchQuery={searchQuery}
+          setSearchQuery={setSearchQuery}
+          searchPlaceholder="Search categories..."
+          isEmpty={filteredCategories.length === 0}
+          emptyIcon={Tag}
+          emptyTitle="No categories found"
+          emptyDescription="Try adjusting your search or add a new category"
+        >
+          <DataTable data={filteredCategories} columns={columns} />
+          <MobileCardList
+            data={filteredCategories}
+            renderCard={(cat: Category) => {
+              const index = filteredCategories.findIndex((c) => c.id === cat.id);
+              return (
+                <MobileCard
+                  title={<div><p className="text-xs text-[#B8B8B8] mb-1">#{index + 1}</p><p className="font-semibold text-white">{cat.categoryName}</p></div>}
+                  headerRight={
+                    <span className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-medium ${cat.status === "active" ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20" : "bg-zinc-700/50 text-zinc-400 border border-zinc-600"}`}>
+                      {cat.status === "active" ? "Active" : "Inactive"}
+                    </span>
+                  }
+                  fields={[{ label: "Services", value: <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-[#D4AF37]/10 text-[#D4AF37] border border-[#D4AF37]/20">{cat.serviceCount} service{cat.serviceCount !== 1 ? "s" : ""}</span> }]}
+                  actions={<ActionButtons actions={[{ type: "edit", onClick: () => handleEditClick(cat) }, { type: "delete", onClick: () => handleDeleteClick(cat) }]} />}
+                />
+              );
+            }}
+          />
+        </TableCard>
+      </div>
+
+      <EditModal isOpen={showAddModal} onClose={() => setShowAddModal(false)} onSave={handleSaveAdd} title="Add New Category" subtitle="Create a new service category" fields={formFields} initialData={{ categoryName: "", status: "active" }} isLoading={isLoading} saveButtonText="Add Category" />
+      <EditModal isOpen={showEditModal} onClose={() => { setShowEditModal(false); setSelectedCategory(null); }} onSave={handleSaveEdit} title="Edit Category" subtitle="Update category information" fields={formFields} initialData={selectedCategory || {}} isLoading={isLoading} saveButtonText="Save Changes" />
+      <DeleteModal isOpen={showDeleteModal} title="Delete Category" itemName={selectedCategory?.categoryName || ""} onConfirm={handleConfirmDelete} onCancel={handleCancelDelete} />
+    </DashboardLayout>
+  );
+}
