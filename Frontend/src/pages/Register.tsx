@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { Mail, User, AlertCircle, X } from "lucide-react";
+import { Mail, User, Store, AlertCircle, X } from "lucide-react";
+import axios from "axios";
 
 import Button from "@/components/ui/Button";
 import AuthLayout from "@/components/auth/AuthLayout";
@@ -10,6 +11,7 @@ import GoogleButton from "@/components/auth/GoogleButton";
 import Divider from "@/components/auth/Divider";
 
 import { useRoleGuard } from "@/hooks/useAuth";
+import { registerOwner, registerCustomer } from "@/services/auth.service";
 
 /* ================= TYPES ================= */
 type FormData = {
@@ -17,19 +19,10 @@ type FormData = {
   email: string;
   password: string;
   confirmPassword: string;
+  barbershop_name: string;
 };
 
 type Errors = Partial<FormData>;
-
-/* ================= SIMULASI EMAIL SUDAH TERDAFTAR ================= */
-// Email di bawah akan memicu error "Email already registered"
-// untuk mensimulasikan akun yang sudah ada di database.
-const TAKEN_EMAILS = [
-  "customer@example.com",
-  "admin@example.com",
-  "owner@example.com",
-  "barber@example.com",
-];
 
 /* ================= ERROR BANNER ================= */
 function ErrorBanner({ message, onClose }: { message: string; onClose: () => void }) {
@@ -58,6 +51,7 @@ export default function Register() {
     email: "",
     password: "",
     confirmPassword: "",
+    barbershop_name: "",
   });
 
   const [errors, setErrors] = useState<Errors>({});
@@ -83,11 +77,14 @@ export default function Register() {
     if (!emailRegex.test(form.email.trim())) {
       newErrors.email = "Please enter a valid email address.";
     }
-    if (form.password.length < 8) {
-      newErrors.password = "Password must be at least 8 characters.";
+    if (form.password.length < 6) {
+      newErrors.password = "Password must be at least 6 characters.";
     }
     if (form.confirmPassword !== form.password) {
       newErrors.confirmPassword = "Passwords do not match.";
+    }
+    if (selectedRole === "owner" && !form.barbershop_name.trim()) {
+      newErrors.barbershop_name = "Barbershop name is required.";
     }
 
     setErrors(newErrors);
@@ -111,7 +108,7 @@ export default function Register() {
   };
 
   /* ================= SUBMIT ================= */
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = async (e: { preventDefault(): void }) => {
     e.preventDefault();
     if (!selectedRole) return;
     if (!validate()) return;
@@ -119,33 +116,54 @@ export default function Register() {
     setIsLoading(true);
 
     try {
-      await new Promise((r) => setTimeout(r, 1000));
-
-      // ── Simulasi: cek apakah email sudah terdaftar ──
-      const isTaken = TAKEN_EMAILS.includes(form.email.trim().toLowerCase());
-      if (isTaken) {
-        setBannerError("This email is already registered. Please use a different email or login instead.");
-        return;
+      if (selectedRole === "owner") {
+        await registerOwner({
+          name: form.name.trim(),
+          email: form.email.trim(),
+          password: form.password,
+          barbershop_name: form.barbershop_name.trim(),
+        });
+      } else {
+        await registerCustomer({
+          name: form.name.trim(),
+          email: form.email.trim(),
+          password: form.password,
+        });
       }
 
       redirectAfterRegister();
+    } catch (err) {
+      if (axios.isAxiosError(err)) {
+        const status = err.response?.status;
+        const message = err.response?.data?.message;
+
+        if (status === 422) {
+          const serverErrors = err.response?.data?.errors as Record<string, string[]> | undefined;
+          if (serverErrors) {
+            const mapped: Errors = {};
+            if (serverErrors.name) mapped.name = serverErrors.name[0];
+            if (serverErrors.email) mapped.email = serverErrors.email[0];
+            if (serverErrors.password) mapped.password = serverErrors.password[0];
+            if (serverErrors.barbershop_name) mapped.barbershop_name = serverErrors.barbershop_name[0];
+            setErrors(mapped);
+            setBannerError("Please fix the errors below before continuing.");
+          } else {
+            setBannerError(message ?? "Validation failed. Please check your input.");
+          }
+        } else {
+          setBannerError(message ?? "Something went wrong. Please try again.");
+        }
+      } else {
+        setBannerError("Cannot connect to server. Please check your connection.");
+      }
     } finally {
       setIsLoading(false);
     }
   };
 
   /* ================= GOOGLE REGISTER ================= */
-  const handleGoogleRegister = async () => {
-    if (!selectedRole) return;
-
-    setIsLoading(true);
-
-    try {
-      await new Promise((r) => setTimeout(r, 800));
-      redirectAfterRegister();
-    } finally {
-      setIsLoading(false);
-    }
+  const handleGoogleRegister = () => {
+    window.location.href = `${import.meta.env.VITE_API_BASE_URL}/auth/google/redirect`;
   };
 
   return (
@@ -190,12 +208,26 @@ export default function Register() {
             error={errors.email}
           />
 
+          {/* Field barbershop hanya untuk owner */}
+          {selectedRole === "owner" && (
+            <FormInput
+              label="Barbershop Name"
+              icon={Store}
+              name="barbershop_name"
+              type="text"
+              value={form.barbershop_name}
+              onChange={handleChange}
+              placeholder="Enter your barbershop name"
+              error={errors.barbershop_name}
+            />
+          )}
+
           <PasswordInput
             label="Password"
             name="password"
             value={form.password}
             onChange={handleChange}
-            placeholder="Minimum 8 characters"
+            placeholder="Minimum 6 characters"
             error={errors.password}
           />
 

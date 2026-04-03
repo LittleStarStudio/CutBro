@@ -3,10 +3,13 @@
 export type Role = "admin" | "owner" | "barber" | "customer";
 
 export type User = {
-  avatar: string | undefined;
+  id: number;
+  avatar?: string;
   name: string;
   email: string;
   role: Role;
+  barbershop_id: number | null;
+  status: string;
 };
 
 const STORAGE_KEY = "user";
@@ -32,7 +35,7 @@ export function getUser(): User | null {
     const raw = localStorage.getItem(STORAGE_KEY);
     return raw ? (JSON.parse(raw) as User) : null;
   } catch {
-    return null; // prevent crash
+    return null;
   }
 }
 
@@ -53,4 +56,3 @@ export function isLoggedIn() {
 export function getRole(): Role | null {
   return getUser()?.role ?? null;
 }
-
