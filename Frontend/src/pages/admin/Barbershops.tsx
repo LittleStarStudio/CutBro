@@ -4,7 +4,8 @@ import { Store, Crown, MapPin, Star, Users, TrendingUp } from "lucide-react";
 
 import StatsGrid from "@/components/admin/StatGrid";
 import { superAdminLogo, superAdminMenu } from "@/components/config/Menu";
-import { logout, getUser } from "@/lib/auth";
+import { useAuth } from "@/components/context/AuthContext";
+import * as adminService from "@/services/admin.service";
 
 import type { Barbershop } from "@/type/AdminType";
 
@@ -34,50 +35,25 @@ import MobileCard from "@/components/admin/MobileCard";
 
 import { useToast } from "@/components/ui/Toast";
 
-/* ================= DUMMY DATA ================= */
+/* ================= HELPERS ================= */
 
-const DUMMY_BARBERSHOPS: Barbershop[] = [
-  {
-    id: 1,
-    name: "Classic Cuts",
-    owner: "John Doe",
-    location: "Jakarta Selatan",
-    plan: "Premium",
-    barbers: 8,
-    status: "active",
-    revenue: "Rp 12.5M",
-    rate: 4.8,
-  },
-  {
-    id: 2,
-    name: "Barber King",
-    owner: "Jane Smith",
-    location: "Bandung",
-    plan: "Pro",
-    barbers: 5,
-    status: "active",
-    revenue: "Rp 8.2M",
-    rate: 4.5,
-  },
-  {
-    id: 3,
-    name: "Pro Barber Shop",
-    owner: "Alice Brown",
-    location: "Surabaya",
-    plan: "Free",
-    barbers: 1,
-    status: "inactive",
-    revenue: "Rp 1.5M",
-    rate: 3.2,
-  },
-];
+function formatRevenue(amount: number): string {
+  if (amount >= 1_000_000) return `Rp ${(amount / 1_000_000).toFixed(1)}M`;
+  if (amount >= 1_000) return `Rp ${(amount / 1_000).toFixed(0)}K`;
+  return `Rp ${amount.toLocaleString("id-ID")}`;
+}
 
 /* ================= COMPONENT ================= */
 
 export default function Barbershops() {
   const toast = useToast();
+  const { user, logout } = useAuth();
 
   const [barbershops, setBarbershops] = useState<Barbershop[]>([]);
+  const [stats, setStats] = useState({ total: 0, free: 0, pro: 0, premium: 0 });
+  const [page, setPage] = useState(1);
+  const [lastPage, setLastPage] = useState(1);
+
   const [searchQuery, setSearchQuery] = useState("");
   const [filterPlan, setFilterPlan] = useState<string>("all");
   const [filterStatus, setFilterStatus] = useState<string>("all");
@@ -87,24 +63,37 @@ export default function Barbershops() {
   const [selectedShop, setSelectedShop] = useState<Barbershop | null>(null);
   const [isLoading, setIsLoading] = useState(false);
 
-  const currentUser = getUser();
+  /* ================= LOAD ================= */
 
-  /* ================= FETCH (DUMMY) ================= */
+  const loadStats = async () => {
+    try {
+      const data = await adminService.getBarbershopStats();
+      setStats(data);
+    } catch { /* silent */ }
+  };
 
-  useEffect(() => {
-    setBarbershops(DUMMY_BARBERSHOPS);
-  }, []);
+  const loadBarbershops = async (p: number) => {
+    try {
+      const result = await adminService.getAdminBarbershops(p);
+      setBarbershops(
+        result.data.map((s) => ({
+          id:       s.id,
+          name:     s.name,
+          owner:    s.owner,
+          location: s.location,
+          plan:     s.plan,
+          barbers:  s.barbers,
+          status:   s.status,
+          revenue:  formatRevenue(s.revenue),
+          rate:     s.rate,
+        }))
+      );
+      setLastPage(result.last_page);
+    } catch { /* silent */ }
+  };
 
-  /* ================= STATS ================= */
-
-  const stats = useMemo(() => {
-    return {
-      total:   barbershops.length,
-      free:    barbershops.filter((s) => s.plan === "Free").length,
-      pro:     barbershops.filter((s) => s.plan === "Pro").length,
-      premium: barbershops.filter((s) => s.plan === "Premium").length,
-    };
-  }, [barbershops]);
+  useEffect(() => { loadStats(); }, []);
+  useEffect(() => { loadBarbershops(page); }, [page]);
 
   /* ================= FILTER ================= */
 
@@ -136,8 +125,8 @@ export default function Barbershops() {
       validation: (value) =>
         value.length >= 3 ? null : "Minimum 3 characters",
     },
-    { name: "owner",    label: "Owner Name",     type: "text",   required: true },
-    { name: "location", label: "Location",        type: "text",   required: true },
+    { name: "owner",    label: "Owner Name", type: "text", required: true },
+    { name: "location", label: "Location",   type: "text", required: true },
     {
       name: "plan",
       label: "Subscription Plan",
@@ -148,25 +137,6 @@ export default function Barbershops() {
         { value: "Pro",     label: "Pro"     },
         { value: "Premium", label: "Premium" },
       ],
-    },
-    {
-      name: "barbers",
-      label: "Number of Barbers",
-      type: "number",
-      required: true,
-      validation: (value) =>
-        Number(value) > 0 ? null : "At least 1 barber required",
-    },
-    { name: "revenue", label: "Monthly Revenue", type: "text",   placeholder: "Rp 10.5M" },
-    {
-      name: "rate",
-      label: "Rating",
-      type: "number",
-      placeholder: "0.0 - 5.0",
-      validation: (value) =>
-        Number(value) >= 0 && Number(value) <= 5
-          ? null
-          : "Rating must be between 0 and 5",
     },
     {
       name: "status",
@@ -191,17 +161,17 @@ export default function Barbershops() {
     if (!selectedShop) return;
     setIsLoading(true);
     try {
-      await new Promise((r) => setTimeout(r, 1200));
-      setBarbershops((prev) =>
-        prev.map((shop) =>
-          shop.id === selectedShop.id
-            ? { ...shop, ...data, barbers: Number(data.barbers), rate: Number(data.rate) }
-            : shop
-        )
-      );
+      await adminService.updateAdminBarbershop(selectedShop.id, {
+        name:              data.name as string,
+        owner_name:        data.owner as string,
+        city:              data.location as string,
+        subscription_plan: (data.plan as string).toLowerCase(),
+        status:            data.status as string,
+      });
       setShowEditModal(false);
-      toast.success("Barbershop Updated", `${selectedShop.name} has been updated successfully.`);
       setSelectedShop(null);
+      toast.success("Barbershop Updated", `${selectedShop.name} updated successfully.`);
+      await Promise.all([loadStats(), loadBarbershops(page)]);
     } catch {
       toast.error("Update Failed", "Something went wrong. Please try again.");
     } finally {
@@ -212,17 +182,28 @@ export default function Barbershops() {
   /* ================= DELETE ================= */
 
   const handleDeleteClick = (shop: Barbershop) => {
+    if (shop.status === "active") {
+      toast.error("Cannot Delete", "Active barbershop cannot be deleted.");
+      return;
+    }
     setSelectedShop(shop);
     setShowDeleteModal(true);
   };
 
-  const handleConfirmDelete = () => {
+  const handleConfirmDelete = async () => {
     if (!selectedShop) return;
     const name = selectedShop.name;
-    setBarbershops((prev) => prev.filter((s) => s.id !== selectedShop.id));
-    setShowDeleteModal(false);
-    setSelectedShop(null);
-    toast.success("Barbershop Deleted", `${name} has been removed.`);
+    try {
+      await adminService.deleteAdminBarbershop(selectedShop.id);
+      setShowDeleteModal(false);
+      setSelectedShop(null);
+      toast.success("Barbershop Deleted", `${name} has been removed.`);
+      const newPage = barbershops.length === 1 && page > 1 ? page - 1 : page;
+      setPage(newPage);
+      if (newPage === page) await Promise.all([loadStats(), loadBarbershops(page)]);
+    } catch {
+      toast.error("Delete Failed", "Something went wrong. Please try again.");
+    }
   };
 
   /* ================= TABLE COLUMNS ================= */
@@ -326,7 +307,7 @@ export default function Barbershops() {
       menuItems={superAdminMenu}
       logo={superAdminLogo}
       userProfile={
-        currentUser ?? {
+        user ?? {
           name:  "Super Admin",
           email: "admin@cutbro.com",
           role:  "admin",
@@ -351,14 +332,14 @@ export default function Barbershops() {
             },
             {
               icon: Users,
-              title: "Free Plan",
+              title: "Free",
               value: stats.free,
               iconBgColor: "bg-[#60A5FA1A]",
               iconColor: "text-[#60A5FA]",
             },
             {
               icon: TrendingUp,
-              title: "Pro Plan",
+              title: "Pro",
               value: stats.pro,
               iconBgColor: "bg-[#F59E0B1A]",
               iconColor: "text-[#F59E0B]",
@@ -446,6 +427,29 @@ export default function Barbershops() {
             />
           </div>
         </TableCard>
+
+        {/* ================= PAGINATION ================= */}
+        {lastPage > 1 && (
+          <div className="flex items-center justify-center gap-3">
+            <button
+              onClick={() => setPage((p) => Math.max(1, p - 1))}
+              disabled={page === 1}
+              className="px-3 py-1.5 text-sm rounded-md bg-card border border-border disabled:opacity-40 hover:bg-muted transition-colors"
+            >
+              Previous
+            </button>
+            <span className="text-sm text-muted-foreground">
+              Page {page} of {lastPage}
+            </span>
+            <button
+              onClick={() => setPage((p) => Math.min(lastPage, p + 1))}
+              disabled={page === lastPage}
+              className="px-3 py-1.5 text-sm rounded-md bg-card border border-border disabled:opacity-40 hover:bg-muted transition-colors"
+            >
+              Next
+            </button>
+          </div>
+        )}
       </div>
 
       {/* ================= MODALS ================= */}

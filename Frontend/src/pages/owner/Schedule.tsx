@@ -13,7 +13,8 @@ import {
 } from "lucide-react";
 
 import { ownerLogo, ownerMenu } from "@/components/config/Menu";
-import { logout, getUser } from "@/lib/auth";
+import { useAuth } from "@/components/context/AuthContext";
+import * as ownerService from "@/services/owner.service";
 import { searchInObject } from "@/lib/utils/AdminUtils";
 
 import StatsGrid from "@/components/admin/StatGrid";
@@ -70,15 +71,6 @@ function deriveInitialStatus(
   return { status: "late", lateMinutes: Math.max(0, shiftDuration) };
 }
 
-/* ================= DUMMY DATA ================= */
-const DUMMY_BARBERS = [
-  { id: 1, name: "Rizky Ramadhan" },
-  { id: 2, name: "Dafa Pratama"   },
-  { id: 3, name: "Hendra Wijaya"  },
-  { id: 4, name: "Budi Santoso"   },
-  { id: 5, name: "Andi Kurniawan" },
-];
-
 type RawEntry = {
   id: number;
   barberId: number;
@@ -96,19 +88,6 @@ type RawEntry = {
 function makeRaw(base: Omit<RawEntry, "status" | "lateMinutes">): RawEntry {
   return { ...base, ...deriveInitialStatus(base.scheduledStart, base.scheduledEnd, base.actualCheckin) };
 }
-
-const INITIAL_RAW: RawEntry[] = [
-  makeRaw({ id: 1,  barberId: 1, barberName: "Rizky Ramadhan", day: "Monday",    date: "2025-07-21", shiftLabel: "Morning",   scheduledStart: "07:00", scheduledEnd: "13:00", actualCheckin: "07:03" }),
-  makeRaw({ id: 2,  barberId: 2, barberName: "Dafa Pratama",   day: "Monday",    date: "2025-07-21", shiftLabel: "Afternoon", scheduledStart: "13:00", scheduledEnd: "19:00", actualCheckin: "13:47" }),
-  makeRaw({ id: 3,  barberId: 3, barberName: "Hendra Wijaya",  day: "Monday",    date: "2025-07-21", shiftLabel: "Morning",   scheduledStart: "07:00", scheduledEnd: "13:00", actualCheckin: null    }),
-  makeRaw({ id: 4,  barberId: 4, barberName: "Budi Santoso",   day: "Monday",    date: "2025-07-21", shiftLabel: "Afternoon", scheduledStart: "13:00", scheduledEnd: "19:00", actualCheckin: "13:05" }),
-  makeRaw({ id: 5,  barberId: 5, barberName: "Andi Kurniawan", day: "Monday",    date: "2025-07-21", shiftLabel: "Evening",   scheduledStart: "19:00", scheduledEnd: "22:00", actualCheckin: null    }),
-  makeRaw({ id: 6,  barberId: 1, barberName: "Rizky Ramadhan", day: "Tuesday",   date: "2025-07-22", shiftLabel: "Morning",   scheduledStart: "07:00", scheduledEnd: "13:00", actualCheckin: "07:22" }),
-  makeRaw({ id: 7,  barberId: 2, barberName: "Dafa Pratama",   day: "Tuesday",   date: "2025-07-22", shiftLabel: "Afternoon", scheduledStart: "13:00", scheduledEnd: "19:00", actualCheckin: "13:00" }),
-  makeRaw({ id: 8,  barberId: 3, barberName: "Hendra Wijaya",  day: "Tuesday",   date: "2025-07-22", shiftLabel: "Evening",   scheduledStart: "19:00", scheduledEnd: "22:00", actualCheckin: "19:15" }),
-  makeRaw({ id: 9,  barberId: 4, barberName: "Budi Santoso",   day: "Wednesday", date: "2025-07-23", shiftLabel: "Morning",   scheduledStart: "07:00", scheduledEnd: "13:00", actualCheckin: null    }),
-  makeRaw({ id: 10, barberId: 5, barberName: "Andi Kurniawan", day: "Wednesday", date: "2025-07-23", shiftLabel: "Afternoon", scheduledStart: "13:00", scheduledEnd: "19:00", actualCheckin: "13:30" }),
-];
 
 function buildSchedule(raw: RawEntry[]): ScheduleEntry[] {
   return raw.map((r) => ({ ...r }));
@@ -134,10 +113,6 @@ function ShiftBadge({ label }: { label: string }) {
 }
 
 /* ================= FILTER OPTIONS ================= */
-const BARBER_FILTER_OPTIONS = [
-  { value: "all", label: "All Barbers" },
-  ...DUMMY_BARBERS.map((b) => ({ value: String(b.id), label: b.name })),
-];
 const DAY_FILTER_OPTIONS = [
   { value: "all", label: "All Days" },
   ...DAYS.map((d) => ({ value: d, label: d })),
@@ -362,11 +337,29 @@ function EditAttendanceModal({ entry, onClose, onSave }: EditAttendanceModalProp
 
 /* ================= MAIN PAGE ================= */
 export default function OwnerBarberScheduleMonitor() {
-  const currentUser = getUser();
+  const { user, logout } = useAuth();
   const toast = useToast();
 
-  const [rawEntries, setRawEntries]     = useState<RawEntry[]>(INITIAL_RAW);
+  const [rawEntries, setRawEntries]     = useState<RawEntry[]>([]);
   const [editingEntry, setEditingEntry] = useState<ScheduleEntry | null>(null);
+
+  const today = new Date().toISOString().split("T")[0];
+
+  useEffect(() => {
+    ownerService.getSchedule().then((data) => {
+      setRawEntries(data.map((a) => makeRaw({
+        id:             a.id,
+        barberId:       a.barber_id,
+        barberName:     a.barber_name,
+        day:            a.day,
+        date:           today,
+        shiftLabel:     a.shift_label as "Morning" | "Afternoon" | "Evening",
+        scheduledStart: a.scheduled_start,
+        scheduledEnd:   a.scheduled_end,
+        actualCheckin:  a.actual_checkin,
+      })));
+    }).catch(() => {});
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const schedule = useMemo(() => buildSchedule(rawEntries), [rawEntries]);
 
@@ -380,6 +373,14 @@ export default function OwnerBarberScheduleMonitor() {
     onTime: schedule.filter((e) => e.status === "on-time").length,
     late:   schedule.filter((e) => e.status === "late").length,
   }), [schedule]);
+
+  const barberFilterOptions = useMemo(() => {
+    const unique = [...new Map(rawEntries.map((r) => [r.barberId, r.barberName])).entries()];
+    return [
+      { value: "all", label: "All Barbers" },
+      ...unique.map(([id, name]) => ({ value: String(id), label: name })),
+    ];
+  }, [rawEntries]);
 
   const filteredSchedule = useMemo(() => {
     return schedule
@@ -516,7 +517,7 @@ export default function OwnerBarberScheduleMonitor() {
       showSidebar
       menuItems={ownerMenu}
       logo={ownerLogo}
-      userProfile={currentUser ?? { name: "owner", email: "owner@cutbro.com", role: "owner" }}
+      userProfile={user ?? { name: "owner", email: "owner@cutbro.com", role: "owner" }}
       showNotification
       notificationCount={stats.late}
       onLogout={logout}
@@ -542,7 +543,7 @@ export default function OwnerBarberScheduleMonitor() {
           setSearchQuery={setSearchQuery}
           searchPlaceholder="Search by barber, day, or shift…"
           filters={[
-            { label: "Barber", value: filterBarber, onChange: setFilterBarber, options: BARBER_FILTER_OPTIONS },
+            { label: "Barber", value: filterBarber, onChange: setFilterBarber, options: barberFilterOptions },
             { label: "Day",    value: filterDay,    onChange: setFilterDay,    options: DAY_FILTER_OPTIONS    },
             { label: "Shift",  value: filterShift,  onChange: setFilterShift,  options: SHIFT_FILTER_OPTIONS  },
           ]}

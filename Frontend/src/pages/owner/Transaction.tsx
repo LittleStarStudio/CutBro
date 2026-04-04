@@ -1,5 +1,5 @@
 import DashboardLayout from "@/components/dashboard/DashboardLayout";
-import { useState, useMemo } from "react";
+import { useState, useEffect, useMemo } from "react";
 import {
   RefreshCcw,
   CheckCircle,
@@ -11,7 +11,8 @@ import {
 } from "lucide-react";
 
 import { ownerLogo, ownerMenu } from "@/components/config/Menu";
-import { logout, getUser } from "@/lib/auth";
+import { useAuth } from "@/components/context/AuthContext";
+import * as ownerService from "@/services/owner.service";
 import { capitalizeFirst } from "@/lib/utils/AdminUtils";
 
 import TableCard from "@/components/admin/TableCard";
@@ -38,25 +39,6 @@ type RefundRow = {
   refundedAt?: string;
 };
 
-/* =========================================================
-   DUMMY DATA
-========================================================= */
-
-const DUMMY_REFUND_DATA: RefundRow[] = [
-  { id: "1",  dateTime: "2026-02-01 09:14:22", orderId: "ORD-2026-0001", payment: "QRIS",     status: "success",  amount: 75000,  email: "rizky.pratama@gmail.com"    },
-  { id: "2",  dateTime: "2026-02-02 11:30:05", orderId: "ORD-2026-0002", payment: "Transfer", status: "pending",  amount: 50000,  email: "eko.santoso@gmail.com"      },
-  { id: "4",  dateTime: "2026-02-04 08:22:41", orderId: "ORD-2026-0004", payment: "QRIS",     status: "failed",   amount: 150000, email: "dimas.kurniawan@yahoo.com"  },
-  { id: "6",  dateTime: "2026-02-07 10:12:33", orderId: "ORD-2026-0006", payment: "Ewallet",  status: "refunded", amount: 90000,  email: "galih.purnomo@gmail.com",   refundedAt: "2026-02-08 09:00:00" },
-  { id: "7",  dateTime: "2026-02-08 16:04:58", orderId: "ORD-2026-0007", payment: "QRIS",     status: "success",  amount: 60000,  email: "hendro.saputra@hotmail.com" },
-  { id: "9",  dateTime: "2026-02-11 11:19:44", orderId: "ORD-2026-0009", payment: "QRIS",     status: "success",  amount: 110000, email: "joko.widi@gmail.com"        },
-  { id: "10", dateTime: "2026-02-12 15:07:13", orderId: "ORD-2026-0010", payment: "Ewallet",  status: "refunded", amount: 65000,  email: "kevin.aditya@gmail.com",    refundedAt: "2026-02-13 14:30:00" },
-  { id: "12", dateTime: "2026-02-15 12:33:51", orderId: "ORD-2026-0012", payment: "QRIS",     status: "failed",   amount: 55000,  email: "mario.susanto@gmail.com"    },
-  { id: "13", dateTime: "2026-02-17 10:01:39", orderId: "ORD-2026-0013", payment: "Ewallet",  status: "success",  amount: 85000,  email: "nanda.pratama@gmail.com"    },
-  { id: "15", dateTime: "2026-02-19 09:17:52", orderId: "ORD-2026-0015", payment: "Transfer", status: "success",  amount: 40000,  email: "panji.wibowo@yahoo.com"     },
-  { id: "16", dateTime: "2026-02-20 16:45:30", orderId: "ORD-2026-0016", payment: "Ewallet",  status: "refunded", amount: 50000,  email: "raka.setiawan@gmail.com",   refundedAt: "2026-02-21 10:15:00" },
-  { id: "18", dateTime: "2026-02-22 08:44:07", orderId: "ORD-2026-0018", payment: "QRIS",     status: "success",  amount: 90000,  email: "tito.raharjo@gmail.com"     },
-  { id: "19", dateTime: "2026-02-24 13:09:26", orderId: "ORD-2026-0019", payment: "Transfer", status: "failed",   amount: 55000,  email: "umar.farouq@gmail.com"      },
-];
 
 /* =========================================================
    FILTER OPTIONS
@@ -87,7 +69,7 @@ export default function OwnerReportRefund() {
   const [filterMethod, setFilterMethod] = useState("all");
   const [copiedOrder,  setCopiedOrder]  = useState<string | null>(null);
   const [confirmItem,  setConfirmItem]  = useState<RefundRow | null>(null);
-  const [transactions, setTransactions] = useState<RefundRow[]>(DUMMY_REFUND_DATA);
+  const [transactions, setTransactions] = useState<RefundRow[]>([]);
 
   /* ── Withdraw states ── */
   const [showWithdrawModal, setShowWithdrawModal] = useState(false);
@@ -96,7 +78,24 @@ export default function OwnerReportRefund() {
   const [withdrawInput,     setWithdrawInput]     = useState("");
 
   const toast = useToast();
-  const currentUser = getUser();
+  const { user, logout } = useAuth();
+
+  const loadRefunds = () => {
+    ownerService.getRefunds().then((data) => {
+      setTransactions(data.map((r) => ({
+        id:         r.id,
+        dateTime:   r.date_time,
+        orderId:    r.order_id,
+        payment:    r.payment,
+        status:     r.status as RefundStatus,
+        amount:     r.amount,
+        email:      r.email,
+        refundedAt: undefined,
+      })));
+    }).catch(() => {});
+  };
+
+  useEffect(() => { loadRefunds(); }, []);
 
   const formatCurrency = (amount: number) =>
     new Intl.NumberFormat("id-ID", {
@@ -155,20 +154,18 @@ export default function OwnerReportRefund() {
   /* ── refund ── */
   const handleRefundClick = (item: RefundRow) => setConfirmItem(item);
 
-  const handleConfirmRefund = () => {
+  const handleConfirmRefund = async () => {
     if (!confirmItem) return;
-    const now = new Date().toISOString().replace("T", " ").slice(0, 19);
-    setTransactions((prev) =>
-      prev.map((t) =>
-        t.id === confirmItem.id
-          ? { ...t, status: "refunded" as RefundStatus, refundedAt: now }
-          : t,
-      ),
-    );
-    toast.success(
-      "Refund Processed",
-      `Order ${confirmItem.orderId} (${formatCurrency(confirmItem.amount)}) has been successfully refunded.`,
-    );
+    try {
+      await ownerService.updateRefundStatus(confirmItem.id, "refunded");
+      loadRefunds();
+      toast.success(
+        "Refund Processed",
+        `Order ${confirmItem.orderId} (${formatCurrency(confirmItem.amount)}) has been successfully refunded.`,
+      );
+    } catch {
+      toast.error("Refund Failed", "Something went wrong. Please try again.");
+    }
     setConfirmItem(null);
   };
 
@@ -480,7 +477,7 @@ export default function OwnerReportRefund() {
         showSidebar
         menuItems={ownerMenu}
         logo={ownerLogo}
-        userProfile={currentUser ?? {
+        userProfile={user ?? {
           name: "Owner",
           email: "owner@cutbro.com",
           role: "owner",

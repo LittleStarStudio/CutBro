@@ -16,10 +16,10 @@ export const STATUS_FILTER_OPTIONS = [
 ];
 
 // Badge Styles for Plans
-export const PLAN_STYLES: Record<string, "default" | "primary" | "success" | "warning" | "danger" | "gold"> = {
-  Free: "default",
-  Pro: "primary",
-  Premium: "gold",
+export const PLAN_STYLES: Record<string, "default" | "primary" | "success" | "warning" | "danger" | "gold" | "purple"> = {
+  Free:    "primary",
+  Pro:     "warning",
+  Premium: "purple",
 };
 
 // Badge Styles for Status

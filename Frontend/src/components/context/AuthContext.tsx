@@ -69,6 +69,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUser(null);
   }, []);
 
+  /* Sinkronisasi jika logout dipanggil dari halaman manapun (via lib/auth) */
+  useEffect(() => {
+    const onLogout = () => setUser(null);
+    window.addEventListener("cutbro:logout", onLogout);
+    return () => window.removeEventListener("cutbro:logout", onLogout);
+  }, []);
+
   /* Sinkronisasi jika tab lain mengubah localStorage (misalnya logout di tab lain) */
   useEffect(() => {
     const onStorage = (e: StorageEvent) => {

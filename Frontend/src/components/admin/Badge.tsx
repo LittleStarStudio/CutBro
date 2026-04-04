@@ -2,7 +2,7 @@ import type { LucideIcon } from "lucide-react";
 
 interface BadgeProps {
   text: string;
-  variant?: "default" | "primary" | "success" | "warning" | "danger" | "gold" | "info";
+  variant?: "default" | "primary" | "success" | "warning" | "danger" | "gold" | "info" | "purple";
   showDot?: boolean;
   dotColor?: string;
   icon?: LucideIcon;
@@ -16,6 +16,7 @@ const variantStyles = {
   danger: "bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-300",
   gold: "bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-300",
   info: "bg-cyan-100 text-cyan-800 dark:bg-cyan-900 dark:text-cyan-300",
+  purple: "bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-300",
 };
 
 export default function Badge({

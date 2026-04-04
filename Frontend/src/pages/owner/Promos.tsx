@@ -3,7 +3,8 @@ import { useState, useEffect, useMemo } from "react";
 import { Tag, Plus } from "lucide-react";
 
 import { ownerLogo, ownerMenu } from "@/components/config/Menu";
-import { logout, getUser } from "@/lib/auth";
+import { useAuth } from "@/components/context/AuthContext";
+import * as ownerService from "@/services/owner.service";
 
 import { searchInObject } from "@/lib/utils/AdminUtils";
 
@@ -28,15 +29,6 @@ interface Promo {
   finalPrice: number;
 }
 
-/* ================= DUMMY DATA ================= */
-const DUMMY_PROMOS: Promo[] = [
-  { id: 1, serviceName: "Premium Haircut", originalPrice: 75000,  discount: 20, finalPrice: 60000  },
-  { id: 2, serviceName: "Hair Coloring",   originalPrice: 200000, discount: 15, finalPrice: 170000 },
-  { id: 3, serviceName: "Deluxe Package",  originalPrice: 150000, discount: 25, finalPrice: 112500 },
-  { id: 4, serviceName: "Beard Trim",      originalPrice: 35000,  discount: 10, finalPrice: 31500  },
-  { id: 5, serviceName: "Basic Haircut",   originalPrice: 50000,  discount: 30, finalPrice: 35000  },
-];
-
 const formatPrice = (price: number) => `Rp ${price.toLocaleString("id-ID")}`;
 
 const calculateFinalPrice = (originalPrice: number, discount: number): number =>
@@ -54,9 +46,21 @@ export default function OwnerPromos() {
   const [selectedPromo, setSelectedPromo]     = useState<Promo | null>(null);
   const [isLoading, setIsLoading]             = useState(false);
 
-  const currentUser = getUser();
+  const { user, logout } = useAuth();
 
-  useEffect(() => { setPromos(DUMMY_PROMOS); }, []);
+  const loadPromos = () => {
+    ownerService.getPromos().then((data) => {
+      setPromos(data.map((p) => ({
+        id:            p.id,
+        serviceName:   p.name,
+        originalPrice: p.original_price,
+        discount:      p.discount_percent,
+        finalPrice:    p.final_price,
+      })));
+    }).catch(() => {});
+  };
+
+  useEffect(() => { loadPromos(); }, []);
 
   const filteredPromos = useMemo(() => {
     return promos.filter((promo) => searchInObject(promo, searchQuery, ["serviceName"]));
@@ -108,11 +112,12 @@ export default function OwnerPromos() {
   const handleSaveAdd = async (data: Record<string, any>) => {
     setIsLoading(true);
     try {
-      await new Promise((resolve) => setTimeout(resolve, 1500));
-      const newId        = Math.max(...promos.map((p) => p.id), 0) + 1;
-      const originalPrice = parseInt(data.originalPrice);
-      const discount      = parseInt(data.discount);
-      setPromos((prev) => [...prev, { id: newId, serviceName: data.serviceName, originalPrice, discount, finalPrice: calculateFinalPrice(originalPrice, discount) }]);
+      await ownerService.createPromo({
+        name:             data.serviceName,
+        original_price:   parseInt(data.originalPrice),
+        discount_percent: parseInt(data.discount),
+      });
+      loadPromos();
       setShowAddModal(false);
       toast.success("Promo Added", `${data.serviceName} promo has been added.`);
     } catch {
@@ -129,18 +134,15 @@ export default function OwnerPromos() {
   };
 
   const handleSaveEdit = async (data: Record<string, any>) => {
+    if (!selectedPromo) return;
     setIsLoading(true);
     try {
-      await new Promise((resolve) => setTimeout(resolve, 1500));
-      const originalPrice = parseInt(data.originalPrice);
-      const discount      = parseInt(data.discount);
-      setPromos((prev) =>
-        prev.map((promo) =>
-          promo.id === selectedPromo?.id
-            ? { ...promo, serviceName: data.serviceName, originalPrice, discount, finalPrice: calculateFinalPrice(originalPrice, discount) }
-            : promo
-        )
-      );
+      await ownerService.updatePromo(selectedPromo.id, {
+        name:             data.serviceName,
+        original_price:   parseInt(data.originalPrice),
+        discount_percent: parseInt(data.discount),
+      });
+      loadPromos();
       setShowEditModal(false);
       toast.success("Promo Updated", `${data.serviceName} promo has been updated.`);
       setSelectedPromo(null);
@@ -157,13 +159,18 @@ export default function OwnerPromos() {
     setShowDeleteModal(true);
   };
 
-  const handleConfirmDelete = () => {
+  const handleConfirmDelete = async () => {
     if (!selectedPromo) return;
     const name = selectedPromo.serviceName;
-    setPromos((prev) => prev.filter((p) => p.id !== selectedPromo.id));
+    try {
+      await ownerService.deletePromo(selectedPromo.id);
+      loadPromos();
+      toast.success("Promo Deleted", `${name} promo has been removed.`);
+    } catch {
+      toast.error("Delete Failed", "Something went wrong. Please try again.");
+    }
     setShowDeleteModal(false);
     setSelectedPromo(null);
-    toast.success("Promo Deleted", `${name} promo has been removed.`);
   };
 
   const handleCancelDelete = () => {
@@ -198,7 +205,7 @@ export default function OwnerPromos() {
       showSidebar
       menuItems={ownerMenu}
       logo={ownerLogo}
-      userProfile={currentUser ?? { name: "owner", email: "owner@cutbro.com", role: "owner" }}
+      userProfile={user ?? { name: "owner", email: "owner@cutbro.com", role: "owner" }}
       showNotification
       notificationCount={3}
       onLogout={logout}

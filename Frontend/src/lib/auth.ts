@@ -45,6 +45,9 @@ export function login(user: User) {
 
 export function logout() {
   localStorage.removeItem(STORAGE_KEY);
+  localStorage.removeItem("cutbro_token");
+  localStorage.removeItem("cutbro_refresh_token");
+  window.dispatchEvent(new Event("cutbro:logout"));
 }
 
 /* ================= HELPERS ================= */

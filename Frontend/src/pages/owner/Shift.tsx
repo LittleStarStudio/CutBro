@@ -5,7 +5,7 @@ import { useState, useEffect, useMemo } from "react";
 import { AlertTriangle, Clock, Plus, User } from "lucide-react";
 
 import { ownerLogo, ownerMenu } from "@/components/config/Menu";
-import { logout, getUser } from "@/lib/auth";
+import { useAuth } from "@/components/context/AuthContext";
 
 import { searchInObject } from "@/lib/utils/AdminUtils";
 
@@ -20,6 +20,7 @@ import MobileCard from "@/components/admin/MobileCard";
 
 import { useShiftSchedule, type ShiftKey } from "@/components/context/ShiftContext";
 import { useToast } from "@/components/ui/Toast";
+import * as ownerService from "@/services/owner.service";
 
 /* ================= TYPES ================= */
 interface BarberShift {
@@ -30,6 +31,7 @@ interface BarberShift {
   startTime: string;
   endTime: string;
   shiftLabel: string;
+  shiftId: number;
   status: "active" | "off" | "leave";
 }
 
@@ -42,27 +44,13 @@ const ALL_SHIFT_PRESETS = [
   { value: "Evening",   label: "Evening",   shiftKey: "evening"   as ShiftKey },
 ];
 
-const DUMMY_BARBERS = [
-  { id: 1, name: "Rizky Ramadhan" },
-  { id: 2, name: "Dafa Pratama"   },
-  { id: 3, name: "Hendra Wijaya"  },
-  { id: 4, name: "Budi Santoso"   },
+const DAY_FILTER_OPTIONS    = [{ value: "all", label: "All Days" }, ...DAYS.map((d) => ({ value: d, label: d }))];
+const STATUS_FILTER_OPTIONS = [
+  { value: "all",    label: "All Status" },
+  { value: "active", label: "Active"     },
+  { value: "off",    label: "Day Off"    },
+  { value: "leave",  label: "On Leave"   },
 ];
-
-const DUMMY_SHIFTS: BarberShift[] = [
-  { id: 1, barberId: 1, barberName: "Rizky Ramadhan", day: "Monday",    startTime: "07:00", endTime: "13:00", shiftLabel: "Morning",   status: "active" },
-  { id: 2, barberId: 1, barberName: "Rizky Ramadhan", day: "Tuesday",   startTime: "07:00", endTime: "13:00", shiftLabel: "Morning",   status: "active" },
-  { id: 3, barberId: 1, barberName: "Rizky Ramadhan", day: "Wednesday", startTime: "13:00", endTime: "19:00", shiftLabel: "Afternoon", status: "active" },
-  { id: 4, barberId: 2, barberName: "Dafa Pratama",   day: "Monday",    startTime: "13:00", endTime: "19:00", shiftLabel: "Afternoon", status: "active" },
-  { id: 5, barberId: 2, barberName: "Dafa Pratama",   day: "Thursday",  startTime: "07:00", endTime: "13:00", shiftLabel: "Morning",   status: "leave"  },
-  { id: 6, barberId: 3, barberName: "Hendra Wijaya",  day: "Friday",    startTime: "19:00", endTime: "22:00", shiftLabel: "Evening",   status: "active" },
-  { id: 7, barberId: 3, barberName: "Hendra Wijaya",  day: "Saturday",  startTime: "13:00", endTime: "19:00", shiftLabel: "Afternoon", status: "active" },
-  { id: 8, barberId: 4, barberName: "Budi Santoso",   day: "Sunday",    startTime: "07:00", endTime: "13:00", shiftLabel: "Morning",   status: "off"    },
-];
-
-const DAY_FILTER_OPTIONS    = [{ value: "all", label: "All Days"    }, ...DAYS.map((d) => ({ value: d, label: d }))];
-const BARBER_FILTER_OPTIONS = [{ value: "all", label: "All Barbers" }, ...DUMMY_BARBERS.map((b) => ({ value: String(b.id), label: b.name }))];
-const STATUS_FILTER_OPTIONS = [{ value: "all", label: "All Status" }, { value: "active", label: "Active" }, { value: "off", label: "Day Off" }, { value: "leave", label: "On Leave" }];
 
 const STATUS_STYLES: Record<string, string> = {
   active: "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20",
@@ -106,6 +94,7 @@ function ShiftFormModal({
   saveButtonText,
   activeShiftPresets,
   shiftSchedule,
+  barbers,
 }: {
   isOpen: boolean;
   onClose: () => void;
@@ -117,6 +106,7 @@ function ShiftFormModal({
   saveButtonText: string;
   activeShiftPresets: typeof ALL_SHIFT_PRESETS;
   shiftSchedule: ReturnType<typeof useShiftSchedule>["shiftSchedule"];
+  barbers: { id: number; name: string }[];
 }) {
   const [form, setForm] = useState<ShiftFormData>({
     barberId:   "",
@@ -131,7 +121,7 @@ function ShiftFormModal({
   useEffect(() => {
     if (!isOpen) return;
     setForm({
-      barberId:   initialData.barberId   ?? String(DUMMY_BARBERS[0].id),
+      barberId:   initialData.barberId   ?? String(barbers[0]?.id ?? ""),
       day:        initialData.day        ?? "Monday",
       shiftLabel: initialData.shiftLabel ?? activeShiftPresets[0]?.value ?? "",
       startTime:  initialData.startTime  ?? "",
@@ -185,7 +175,7 @@ function ShiftFormModal({
               onChange={set("barberId")}
               className="w-full bg-zinc-900 border border-zinc-700 rounded-xl px-3 py-2.5 text-sm text-white focus:outline-none focus:border-[#D4AF37]/50"
             >
-              {DUMMY_BARBERS.map((b) => (
+              {barbers.map((b) => (
                 <option key={b.id} value={String(b.id)}>{b.name}</option>
               ))}
             </select>
@@ -366,23 +356,25 @@ function DuplicateShiftModal({
 /* ================= MAIN PAGE ================= */
 export default function OwnerBarberShifts() {
   const toast = useToast();
+  const { user, logout } = useAuth();
 
   const [shifts, setShifts]             = useState<BarberShift[]>([]);
+  const [barbers, setBarbers]           = useState<{ id: number; name: string }[]>([]);
+  const [apiShifts, setApiShifts]       = useState<{ id: number; label: string }[]>([]);
   const [searchQuery, setSearchQuery]   = useState("");
   const [filterDay, setFilterDay]       = useState("all");
   const [filterBarber, setFilterBarber] = useState("all");
   const [filterStatus, setFilterStatus] = useState("all");
 
-  const [showDeleteModal, setShowDeleteModal] = useState(false);
-  const [showEditModal, setShowEditModal]     = useState(false);
-  const [showAddModal, setShowAddModal]       = useState(false);
-  const [selectedShift, setSelectedShift]     = useState<BarberShift | null>(null);
-  const [isLoading, setIsLoading]             = useState(false);
+  const [showDeleteModal, setShowDeleteModal]   = useState(false);
+  const [showEditModal, setShowEditModal]       = useState(false);
+  const [showAddModal, setShowAddModal]         = useState(false);
+  const [selectedShift, setSelectedShift]       = useState<BarberShift | null>(null);
+  const [isLoading, setIsLoading]               = useState(false);
 
   const [showDuplicateModal, setShowDuplicateModal] = useState(false);
   const [duplicateInfo, setDuplicateInfo]           = useState<{ barberName: string; day: string; existingShift: BarberShift | null }>({ barberName: "", day: "", existingShift: null });
 
-  const currentUser = getUser();
   const { shiftSchedule } = useShiftSchedule();
 
   const activeShiftPresets = useMemo(
@@ -390,7 +382,39 @@ export default function OwnerBarberShifts() {
     [shiftSchedule]
   );
 
-  useEffect(() => { setShifts(DUMMY_SHIFTS); }, []);
+  const barberFilterOptions = useMemo(() => [
+    { value: "all", label: "All Barbers" },
+    ...barbers.map((b) => ({ value: String(b.id), label: b.name })),
+  ], [barbers]);
+
+  const loadAssignments = () => {
+    ownerService.getShiftAssignments().then((data) => {
+      setShifts(data.map((a) => ({
+        id:         a.id,
+        barberId:   a.barber_id,
+        barberName: a.barber_name,
+        day:        a.day_of_week,
+        startTime:  a.start_time,
+        endTime:    a.end_time,
+        shiftLabel: a.shift_label,
+        shiftId:    a.shift_id,
+        status:     a.status,
+      })));
+    }).catch(() => {});
+  };
+
+  useEffect(() => {
+    loadAssignments();
+    ownerService.getBarbers().then((data) => {
+      setBarbers((data as any[]).map((b: any) => ({
+        id:   b.id,
+        name: b.user?.name ?? b.name ?? "-",
+      })));
+    }).catch(() => {});
+    ownerService.getShifts().then((data) => {
+      setApiShifts(data.map((s) => ({ id: s.id, label: s.label })));
+    }).catch(() => {});
+  }, []);
 
   const filteredShifts = useMemo(() => {
     return shifts.filter((shift) => {
@@ -402,17 +426,7 @@ export default function OwnerBarberShifts() {
     });
   }, [shifts, searchQuery, filterDay, filterBarber, filterStatus]);
 
-  // Helper: get start/end time from ShiftContext based on shiftLabel
-  const getShiftTimes = (shiftLabel: string) => {
-    const preset = ALL_SHIFT_PRESETS.find((s) => s.value === shiftLabel);
-    if (!preset) return { startTime: "", endTime: "" };
-    return {
-      startTime: shiftSchedule[preset.shiftKey]?.start ?? "",
-      endTime:   shiftSchedule[preset.shiftKey]?.end   ?? "",
-    };
-  };
-
-  // Helper: check if barber already has a shift on the given day (excluding a specific id for edit)
+  // Check if barber already has a shift on the given day (excluding a specific id for edit)
   const findDuplicateShift = (barberId: number, day: string, excludeId?: number): BarberShift | undefined =>
     shifts.find((s) => s.barberId === barberId && s.day === day && s.id !== excludeId);
 
@@ -420,32 +434,31 @@ export default function OwnerBarberShifts() {
   const handleAddClick = () => setShowAddModal(true);
 
   const handleSaveAdd = async (data: ShiftFormData) => {
-    // Duplicate check before saving
     const duplicate = findDuplicateShift(Number(data.barberId), data.day);
     if (duplicate) {
-      const barber = DUMMY_BARBERS.find((b) => String(b.id) === String(data.barberId));
+      const barber = barbers.find((b) => String(b.id) === String(data.barberId));
       setDuplicateInfo({ barberName: barber?.name ?? "", day: data.day, existingShift: duplicate });
       setShowDuplicateModal(true);
       return;
     }
 
+    const apiShift = apiShifts.find((s) => s.label === data.shiftLabel);
+    if (!apiShift) {
+      toast.error("Add Failed", "Shift not found. Please try again.");
+      return;
+    }
+
     setIsLoading(true);
     try {
-      await new Promise((r) => setTimeout(r, 1200));
-      const barber = DUMMY_BARBERS.find((b) => String(b.id) === String(data.barberId));
-      const { startTime, endTime } = getShiftTimes(data.shiftLabel);
-      const newShift: BarberShift = {
-        id:         Math.max(...shifts.map((s) => s.id), 0) + 1,
-        barberId:   Number(data.barberId),
-        barberName: barber?.name ?? "",
-        day:        data.day,
-        shiftLabel: data.shiftLabel,
-        startTime,
-        endTime,
-        status:     data.status,
-      };
-      setShifts((prev) => [...prev, newShift]);
+      await ownerService.createShiftAssignment({
+        barber_id:   Number(data.barberId),
+        shift_id:    apiShift.id,
+        day_of_week: data.day,
+        status:      data.status,
+      });
+      loadAssignments();
       setShowAddModal(false);
+      const barber = barbers.find((b) => String(b.id) === String(data.barberId));
       toast.success("Shift Added", `${barber?.name}'s ${data.shiftLabel} shift on ${data.day} has been added.`);
     } catch {
       toast.error("Add Failed", "Something went wrong. Please try again.");
@@ -461,38 +474,28 @@ export default function OwnerBarberShifts() {
   };
 
   const handleSaveEdit = async (data: ShiftFormData) => {
-    // Duplicate check — exclude the shift being edited itself
     const duplicate = findDuplicateShift(Number(data.barberId), data.day, selectedShift?.id);
     if (duplicate) {
-      const barber = DUMMY_BARBERS.find((b) => String(b.id) === String(data.barberId));
+      const barber = barbers.find((b) => String(b.id) === String(data.barberId));
       setDuplicateInfo({ barberName: barber?.name ?? "", day: data.day, existingShift: duplicate });
       setShowDuplicateModal(true);
       return;
     }
 
+    const apiShift = apiShifts.find((s) => s.label === data.shiftLabel);
+    if (!apiShift || !selectedShift) return;
+
     setIsLoading(true);
     try {
-      await new Promise((r) => setTimeout(r, 1200));
-      const barber = DUMMY_BARBERS.find((b) => String(b.id) === String(data.barberId));
-      // Always derive times from ShiftContext, ignore whatever was in form data
-      const { startTime, endTime } = getShiftTimes(data.shiftLabel);
-      setShifts((prev) =>
-        prev.map((s) =>
-          s.id === selectedShift?.id
-            ? {
-                ...s,
-                barberId:   Number(data.barberId),
-                barberName: barber?.name ?? s.barberName,
-                day:        data.day,
-                shiftLabel: data.shiftLabel,
-                startTime,
-                endTime,
-                status:     data.status,
-              }
-            : s
-        )
-      );
+      await ownerService.updateShiftAssignment(selectedShift.id, {
+        barber_id:   Number(data.barberId),
+        shift_id:    apiShift.id,
+        day_of_week: data.day,
+        status:      data.status,
+      });
+      loadAssignments();
       setShowEditModal(false);
+      const barber = barbers.find((b) => String(b.id) === String(data.barberId));
       toast.success("Shift Updated", `${barber?.name}'s shift has been updated.`);
       setSelectedShift(null);
     } catch {
@@ -508,13 +511,18 @@ export default function OwnerBarberShifts() {
     setShowDeleteModal(true);
   };
 
-  const handleConfirmDelete = () => {
+  const handleConfirmDelete = async () => {
     if (!selectedShift) return;
     const label = `${selectedShift.barberName} – ${selectedShift.day} (${selectedShift.shiftLabel})`;
-    setShifts((prev) => prev.filter((s) => s.id !== selectedShift.id));
+    try {
+      await ownerService.deleteShiftAssignment(selectedShift.id);
+      loadAssignments();
+      toast.success("Shift Deleted", `${label} has been removed.`);
+    } catch {
+      toast.error("Delete Failed", "Something went wrong. Please try again.");
+    }
     setShowDeleteModal(false);
     setSelectedShift(null);
-    toast.success("Shift Deleted", `${label} has been removed.`);
   };
 
   const handleCancelDelete = () => {
@@ -550,7 +558,7 @@ export default function OwnerBarberShifts() {
       showSidebar
       menuItems={ownerMenu}
       logo={ownerLogo}
-      userProfile={currentUser ?? { name: "owner", email: "owner@cutbro.com", role: "owner" }}
+      userProfile={user ?? { name: "owner", email: "owner@cutbro.com", role: "owner" }}
       showNotification
       notificationCount={3}
       onLogout={logout}
@@ -564,7 +572,7 @@ export default function OwnerBarberShifts() {
           searchPlaceholder="Search by barber, day, or shift..."
           filters={[
             { label: "Day",    value: filterDay,    onChange: setFilterDay,    options: DAY_FILTER_OPTIONS    },
-            { label: "Barber", value: filterBarber, onChange: setFilterBarber, options: BARBER_FILTER_OPTIONS },
+            { label: "Barber", value: filterBarber, onChange: setFilterBarber, options: barberFilterOptions   },
             { label: "Status", value: filterStatus, onChange: setFilterStatus, options: STATUS_FILTER_OPTIONS },
           ]}
           isEmpty={filteredShifts.length === 0}
@@ -601,7 +609,7 @@ export default function OwnerBarberShifts() {
         title="Add New Shift"
         subtitle="Assign a work shift to a barber"
         initialData={{
-          barberId:   String(DUMMY_BARBERS[0].id),
+          barberId:   String(barbers[0]?.id ?? ""),
           day:        "Monday",
           shiftLabel: activeShiftPresets[0]?.value ?? "",
           status:     "active",
@@ -610,6 +618,7 @@ export default function OwnerBarberShifts() {
         saveButtonText="Add Shift"
         activeShiftPresets={activeShiftPresets}
         shiftSchedule={shiftSchedule}
+        barbers={barbers}
       />
       <ShiftFormModal
         isOpen={showEditModal}
@@ -626,6 +635,7 @@ export default function OwnerBarberShifts() {
         saveButtonText="Save Changes"
         activeShiftPresets={activeShiftPresets}
         shiftSchedule={shiftSchedule}
+        barbers={barbers}
       />
       <DeleteModal
         isOpen={showDeleteModal}

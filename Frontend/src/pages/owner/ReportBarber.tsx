@@ -4,7 +4,8 @@ import { Scissors, TrendingUp, Award, FileSpreadsheet, Info, Users } from "lucid
 import * as XLSX from "xlsx";
 
 import { ownerLogo, ownerMenu } from "@/components/config/Menu";
-import { logout, getUser } from "@/lib/auth";
+import { useAuth } from "@/components/context/AuthContext";
+import * as ownerService from "@/services/owner.service";
 
 import { searchInObject, filterByField } from "@/lib/utils/AdminUtils";
 
@@ -27,23 +28,7 @@ interface BarberReport {
   status: "Active" | "Inactive";
 }
 
-/* ================= DUMMY DATA ================= */
-const DUMMY_BARBER_REPORTS: BarberReport[] = [
-  { id: 1, barberName: "John Barber",  account: "john.barber",  joinDate: "2023-01-15", lastActiveDate: "2024-02-24", status: "Active" },
-  { id: 2, barberName: "Mike Stylist", account: "mike.stylist", joinDate: "2023-03-20", lastActiveDate: "2024-02-23", status: "Active" },
-  { id: 3, barberName: "David Barber", account: "david.barber", joinDate: "2023-06-10", lastActiveDate: "2024-02-24", status: "Active" },
-  { id: 4, barberName: "Andi Barber",  account: "andi.barber",  joinDate: "2023-09-05", lastActiveDate: "2024-02-23", status: "Active" },
-];
-
 /* ================= FILTER OPTIONS ================= */
-const BARBER_FILTER_OPTIONS = [
-  { value: "all",          label: "All Barbers" },
-  { value: "John Barber",  label: "John Barber" },
-  { value: "Mike Stylist", label: "Mike Stylist" },
-  { value: "David Barber", label: "David Barber" },
-  { value: "Andi Barber",  label: "Andi Barber" },
-];
-
 const STATUS_FILTER_OPTIONS = [
   { value: "all",      label: "All Status" },
   { value: "Active",   label: "Active" },
@@ -56,10 +41,19 @@ export default function BarberReport() {
   const [filterBarber, setFilterBarber] = useState("all");
   const [filterStatus, setFilterStatus] = useState("all");
 
-  const currentUser = getUser();
+  const { user, logout } = useAuth();
 
   useEffect(() => {
-    setReports(DUMMY_BARBER_REPORTS);
+    ownerService.getBarberReport().then((data) => {
+      setReports(data.map((r) => ({
+        id:             r.id,
+        barberName:     r.barber_name,
+        account:        r.account,
+        joinDate:       r.join_date,
+        lastActiveDate: r.last_active_date,
+        status:         r.status as "Active" | "Inactive",
+      })));
+    }).catch(() => {});
   }, []);
 
   /* ================= STATS ================= */
@@ -74,6 +68,11 @@ export default function BarberReport() {
       newestBarber: newest?.barberName ?? "-",
     };
   }, [reports]);
+
+  const barberFilterOptions = useMemo(() => [
+    { value: "all", label: "All Barbers" },
+    ...reports.map((r) => ({ value: r.barberName, label: r.barberName })),
+  ], [reports]);
 
   /* ================= FILTER ================= */
   const filteredReports = useMemo(() => {
@@ -159,7 +158,7 @@ export default function BarberReport() {
       menuItems={ownerMenu}
       logo={ownerLogo}
       userProfile={
-        currentUser ?? {
+        user ?? {
           name: "owner",
           email: "owner@cutbro.com",
           role: "owner",
@@ -234,7 +233,7 @@ export default function BarberReport() {
               label: "Barber",
               value: filterBarber,
               onChange: setFilterBarber,
-              options: BARBER_FILTER_OPTIONS,
+              options: barberFilterOptions,
             },
             {
               label: "Status",

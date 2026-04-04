@@ -1,6 +1,6 @@
 import { useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
-import { Mail, AlertCircle, X } from "lucide-react";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
+import { Mail, AlertCircle, X, MailCheck } from "lucide-react";
 import axios from "axios";
 
 import Button from "@/components/ui/Button";
@@ -29,15 +29,38 @@ function ErrorBanner({ message, onClose }: { message: string; onClose: () => voi
   );
 }
 
+/* ================= INFO BANNER ================= */
+function InfoBanner({ message, onClose }: { message: string; onClose: () => void }) {
+  return (
+    <div className="flex items-start gap-3 px-4 py-3 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-400 animate-in fade-in slide-in-from-top-2 duration-300">
+      <MailCheck className="w-5 h-5 mt-0.5 shrink-0" />
+      <p className="text-sm flex-1">{message}</p>
+      <button
+        type="button"
+        onClick={onClose}
+        className="text-amber-400/60 hover:text-amber-400 transition-colors shrink-0"
+      >
+        <X className="w-4 h-4" />
+      </button>
+    </div>
+  );
+}
+
 /* ================= MAIN COMPONENT ================= */
 export default function Login() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const { setUser } = useAuth();
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [info, setInfo] = useState<string | null>(
+    searchParams.get("registered") === "true"
+      ? "Registration successful! Please check your email and verify your account before logging in."
+      : null
+  );
 
   const onSubmit = async (e: { preventDefault(): void }) => {
     e.preventDefault();
@@ -53,7 +76,9 @@ export default function Login() {
         const status = err.response?.status;
         const message = err.response?.data?.message;
 
-        if (status === 401) {
+        if (!err.response) {
+          setError("Cannot connect to server. Please check your connection.");
+        } else if (status === 401) {
           setError("Email or password is incorrect.");
         } else if (status === 403) {
           setError(message ?? "Your account is not allowed to login.");
@@ -77,6 +102,11 @@ export default function Login() {
   return (
     <AuthLayout title="Sign In" subtitle="" selectedRole={null} onBack={() => {}}>
       <form onSubmit={onSubmit} className="space-y-6" noValidate>
+
+        {/* Info Banner — verifikasi email setelah register */}
+        {info && (
+          <InfoBanner message={info} onClose={() => setInfo(null)} />
+        )}
 
         {/* Error Banner */}
         {error && (

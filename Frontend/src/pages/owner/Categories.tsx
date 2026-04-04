@@ -3,7 +3,8 @@ import { useState, useEffect, useMemo } from "react";
 import { Tag, Plus } from "lucide-react";
 
 import { ownerLogo, ownerMenu } from "@/components/config/Menu";
-import { logout, getUser } from "@/lib/auth";
+import { useAuth } from "@/components/context/AuthContext";
+import * as ownerService from "@/services/owner.service";
 
 import { searchInObject } from "@/lib/utils/AdminUtils";
 
@@ -27,17 +28,9 @@ interface Category {
   status: "active" | "inactive";
 }
 
-/* ================= DUMMY DATA ================= */
-const DUMMY_CATEGORIES: Category[] = [
-  { id: 1, categoryName: "Haircut",   serviceCount: 2, status: "active"   },
-  { id: 2, categoryName: "Grooming",  serviceCount: 1, status: "active"   },
-  { id: 3, categoryName: "Coloring",  serviceCount: 1, status: "inactive" },
-  { id: 4, categoryName: "Treatment", serviceCount: 1, status: "active"   },
-  { id: 5, categoryName: "Package",   serviceCount: 1, status: "inactive" },
-];
-
 export default function OwnerCategories() {
   const toast = useToast();
+  const { user, logout } = useAuth();
 
   const [categories, setCategories]   = useState<Category[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
@@ -48,9 +41,18 @@ export default function OwnerCategories() {
   const [selectedCategory, setSelectedCategory] = useState<Category | null>(null);
   const [isLoading, setIsLoading]               = useState(false);
 
-  const currentUser = getUser();
+  const loadCategories = () => {
+    ownerService.getCategories().then((data) => {
+      setCategories(data.map((c) => ({
+        id:           c.id,
+        categoryName: c.name,
+        serviceCount: 0,
+        status:       "active" as const,
+      })));
+    }).catch(() => {});
+  };
 
-  useEffect(() => { setCategories(DUMMY_CATEGORIES); }, []);
+  useEffect(() => { loadCategories(); }, []);
 
   /* ================= FILTER ================= */
   const filteredCategories = useMemo(() => {
@@ -85,9 +87,8 @@ export default function OwnerCategories() {
   const handleSaveAdd = async (data: Record<string, any>) => {
     setIsLoading(true);
     try {
-      await new Promise((resolve) => setTimeout(resolve, 1200));
-      const newId = Math.max(...categories.map((c) => c.id), 0) + 1;
-      setCategories((prev) => [...prev, { id: newId, categoryName: data.categoryName, serviceCount: 0, status: data.status }]);
+      await ownerService.createCategory({ name: data.categoryName });
+      loadCategories();
       setShowAddModal(false);
       toast.success("Category Added", `${data.categoryName} has been added successfully.`);
     } catch {
@@ -104,14 +105,11 @@ export default function OwnerCategories() {
   };
 
   const handleSaveEdit = async (data: Record<string, any>) => {
+    if (!selectedCategory) return;
     setIsLoading(true);
     try {
-      await new Promise((resolve) => setTimeout(resolve, 1200));
-      setCategories((prev) =>
-        prev.map((cat) =>
-          cat.id === selectedCategory?.id ? { ...cat, categoryName: data.categoryName, status: data.status } : cat
-        )
-      );
+      await ownerService.updateCategory(selectedCategory.id, { name: data.categoryName });
+      loadCategories();
       setShowEditModal(false);
       toast.success("Category Updated", `${data.categoryName} has been updated successfully.`);
       setSelectedCategory(null);
@@ -128,10 +126,15 @@ export default function OwnerCategories() {
     setShowDeleteModal(true);
   };
 
-  const handleConfirmDelete = () => {
+  const handleConfirmDelete = async () => {
     if (!selectedCategory) return;
     const name = selectedCategory.categoryName;
-    setCategories((prev) => prev.filter((c) => c.id !== selectedCategory.id));
+    try {
+      await ownerService.deleteCategory(selectedCategory.id);
+      loadCategories();
+    } catch {
+      toast.error("Delete Failed", "Something went wrong. Please try again.");
+    }
     setShowDeleteModal(false);
     setSelectedCategory(null);
     toast.success("Category Deleted", `${name} has been removed.`);
@@ -193,7 +196,7 @@ export default function OwnerCategories() {
       showSidebar
       menuItems={ownerMenu}
       logo={ownerLogo}
-      userProfile={currentUser ?? { name: "owner", email: "owner@cutbro.com", role: "owner" }}
+      userProfile={user ?? { name: "owner", email: "owner@cutbro.com", role: "owner" }}
       showNotification
       notificationCount={3}
       onLogout={logout}

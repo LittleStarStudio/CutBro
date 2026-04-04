@@ -1,9 +1,10 @@
 import DashboardLayout from "@/components/dashboard/DashboardLayout";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { CreditCard, Save } from "lucide-react";
 
 import { ownerLogo, ownerMenu } from "@/components/config/Menu";
-import { logout, getUser } from "@/lib/auth";
+import { useAuth } from "@/components/context/AuthContext";
+import * as ownerService from "@/services/owner.service";
 
 import FormInput from "@/components/admin/FormInput";
 import ImageUpload from "@/components/admin/ImageUpload";
@@ -26,7 +27,20 @@ export default function OwnerPayment() {
   const [errors, setErrors]           = useState<Record<string, string>>({});
   const [touched, setTouched]         = useState<Record<string, boolean>>({});
 
-  const currentUser = getUser();
+  const { user, logout } = useAuth();
+
+  useEffect(() => {
+    ownerService.getPaymentSettings().then((data) => {
+      setFormData({
+        bankName:      data.bank_name      ?? "",
+        accountNumber: data.account_number ?? "",
+        accountHolder: data.account_holder ?? "",
+      });
+      if (data.qris_image_url) {
+        setQrisPreview(data.qris_image_url);
+      }
+    }).catch(() => {});
+  }, []);
 
   // Button aktif jika minimal satu field sudah diisi
   const hasAnyInput =
@@ -84,7 +98,12 @@ export default function OwnerPayment() {
 
     setIsSaving(true);
     try {
-      await new Promise((resolve) => setTimeout(resolve, 1500));
+      const fd = new FormData();
+      fd.append("bank_name",      formData.bankName);
+      fd.append("account_number", formData.accountNumber);
+      fd.append("account_holder", formData.accountHolder);
+      if (qrisImage) fd.append("qris_image", qrisImage);
+      await ownerService.updatePaymentSettings(fd);
       toast.success("Payment Settings Saved", "Your bank account information has been updated successfully.");
     } catch {
       toast.error("Save Failed", "Something went wrong. Please try again.");
@@ -100,7 +119,7 @@ export default function OwnerPayment() {
       showSidebar
       menuItems={ownerMenu}
       logo={ownerLogo}
-      userProfile={currentUser ?? { name: "owner", email: "owner@cutbro.com", role: "owner" }}
+      userProfile={user ?? { name: "owner", email: "owner@cutbro.com", role: "owner" }}
       showNotification
       notificationCount={3}
       onLogout={logout}

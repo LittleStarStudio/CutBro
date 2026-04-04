@@ -3,7 +3,8 @@ import { useState, useEffect, useMemo } from "react";
 import { Calendar, Clock, Phone, X } from "lucide-react";
 
 import { ownerLogo, ownerMenu } from "@/components/config/Menu";
-import { logout, getUser } from "@/lib/auth";
+import { useAuth } from "@/components/context/AuthContext";
+import * as ownerService from "@/services/owner.service";
 
 import { searchInObject, filterByField, capitalizeFirst } from "@/lib/utils/AdminUtils";
 
@@ -35,12 +36,11 @@ interface Booking {
   status: BookingStatus;
 }
 
-/* ================= DUMMY DATA ================= */
-const DUMMY_BOOKINGS: Booking[] = [
-  { id: 1, customerName: "Ahmad Wijaya",  customerPhone: "081234567890", barber: "John Barber",  service: "Premium Haircut",      date: "2024-02-15", time: "10:00", price: "Rp 75,000",  status: "paid"    },
-  { id: 2, customerName: "Budi Santoso",  customerPhone: "082345678901", barber: "Mike Stylist", service: "Haircut + Beard Trim", date: "2024-02-15", time: "11:30", price: "Rp 100,000", status: "pending" },
-  { id: 3, customerName: "Chandra Putra", customerPhone: "083456789012", barber: "David Cut",    service: "Basic Haircut",        date: "2024-02-14", time: "14:00", price: "Rp 50,000",  status: "canceled"},
-];
+const mapStatus = (s: string): BookingStatus => {
+  if (s === "paid" || s === "done")                    return "paid";
+  if (s === "cancelled" || s === "expired" || s === "no_show") return "canceled";
+  return "pending";
+};
 
 /* ================= CONSTANTS ================= */
 const STATUS_FILTER_OPTIONS = [
@@ -65,6 +65,7 @@ const STATUS_DOT_COLORS: Record<BookingStatus, string> = {
 /* ================= COMPONENT ================= */
 export default function OwnerBooking() {
   const toast = useToast();
+  const { user, logout } = useAuth();
 
   const [bookings, setBookings]       = useState<Booking[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
@@ -75,9 +76,23 @@ export default function OwnerBooking() {
   const [selectedBooking, setSelectedBooking] = useState<Booking | null>(null);
   const [isLoading, setIsLoading]             = useState(false);
 
-  const currentUser = getUser();
+  const loadBookings = () => {
+    ownerService.getBookings().then((data) => {
+      setBookings((data as any[]).map((b: any) => ({
+        id:            b.id,
+        customerName:  b.customer?.name ?? "-",
+        customerPhone: b.customer?.phone ?? "-",
+        barber:        b.barber?.user?.name ?? b.barber?.name ?? "-",
+        service:       b.service?.name ?? "-",
+        date:          b.booking_date ?? "-",
+        time:          b.start_time   ? b.start_time.slice(0, 5) : "-",
+        price:         `Rp ${Number(b.total_price).toLocaleString("id-ID")}`,
+        status:        mapStatus(b.status),
+      })));
+    }).catch(() => {});
+  };
 
-  useEffect(() => { setBookings(DUMMY_BOOKINGS); }, []);
+  useEffect(() => { loadBookings(); }, []);
 
   /* ================= STATS ================= */
   const stats = useMemo(() => ({
@@ -125,16 +140,13 @@ export default function OwnerBooking() {
   };
 
   const handleSaveEdit = async (data: Record<string, any>) => {
+    if (!selectedBooking) return;
     setIsLoading(true);
+    // Map UI status back to backend status
+    const backendStatus = data.status === "paid" ? "paid" : data.status === "canceled" ? "cancelled" : "pending_payment";
     try {
-      await new Promise((resolve) => setTimeout(resolve, 1500));
-      setBookings((prev) =>
-        prev.map((booking) =>
-          booking.id === selectedBooking?.id
-            ? { ...booking, status: data.status as BookingStatus }
-            : booking
-        )
-      );
+      await ownerService.updateBookingStatus(selectedBooking.id, backendStatus);
+      loadBookings();
       setShowEditModal(false);
       toast.success("Booking Updated", `Status changed to ${capitalizeFirst(data.status)}.`);
       setSelectedBooking(null);
@@ -151,13 +163,19 @@ export default function OwnerBooking() {
     setShowDeleteModal(true);
   };
 
-  const handleConfirmDelete = () => {
+  const handleConfirmDelete = async () => {
     if (!selectedBooking) return;
     const name = selectedBooking.customerName;
-    setBookings((prev) => prev.filter((b) => b.id !== selectedBooking.id));
+    try {
+      // Cancel the booking instead of hard-delete
+      await ownerService.updateBookingStatus(selectedBooking.id, "cancelled");
+      loadBookings();
+    } catch {
+      toast.error("Failed", "Something went wrong.");
+    }
     setShowDeleteModal(false);
     setSelectedBooking(null);
-    toast.success("Booking Deleted", `Booking for ${name} has been removed.`);
+    toast.success("Booking Cancelled", `Booking for ${name} has been cancelled.`);
   };
 
   const handleCancelDelete = () => {
@@ -213,7 +231,7 @@ export default function OwnerBooking() {
       showSidebar
       menuItems={ownerMenu}
       logo={ownerLogo}
-      userProfile={currentUser ?? { name: "owner", email: "owner@cutbro.com", role: "owner" }}
+      userProfile={user ?? { name: "owner", email: "owner@cutbro.com", role: "owner" }}
       showNotification
       notificationCount={3}
       onLogout={logout}

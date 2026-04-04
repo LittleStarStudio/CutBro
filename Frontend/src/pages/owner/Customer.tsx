@@ -3,12 +3,12 @@ import { useState, useEffect, useMemo } from "react";
 import { Users, UserCheck, UserX } from "lucide-react";
 
 import { ownerLogo, ownerMenu } from "@/components/config/Menu";
-import { logout, getUser } from "@/lib/auth";
+import { useAuth } from "@/components/context/AuthContext";
+import * as ownerService from "@/services/owner.service";
 
 import { searchInObject, filterByField, capitalizeFirst } from "@/lib/utils/AdminUtils";
 
 import Badge from "@/components/admin/Badge";
-import DeleteModal from "@/components/admin/DeleteModal";
 import ActionButtons from "@/components/admin/ActionButtons";
 import EditModal, { type FormField } from "@/components/admin/EditModal";
 
@@ -33,15 +33,6 @@ interface Customer {
   bannedReason?: string;
 }
 
-/* ================= DUMMY DATA ================= */
-const DUMMY_CUSTOMERS: Customer[] = [
-  { id: 1, name: "Ahmad Wijaya",   phone: "081234567890", email: "ahmad@example.com",   totalBookings: 15, lastVisit: "2024-02-10", totalSpent: "Rp 1,125,000", status: "active" },
-  { id: 2, name: "Budi Santoso",   phone: "082345678901", email: "budi@example.com",    totalBookings: 8,  lastVisit: "2024-02-05", totalSpent: "Rp 600,000",   status: "active" },
-  { id: 3, name: "Chandra Putra",  phone: "083456789012", email: "chandra@example.com", totalBookings: 3,  lastVisit: "2024-01-20", totalSpent: "Rp 225,000",   status: "banned", bannedReason: "Repeatedly missed appointments without notice" },
-  { id: 4, name: "Dedi Kurniawan", phone: "084567890123", email: "dedi@example.com",    totalBookings: 20, lastVisit: "2024-02-12", totalSpent: "Rp 1,500,000", status: "active" },
-  { id: 5, name: "Eko Prasetyo",   phone: "085678901234", email: "eko@example.com",     totalBookings: 12, lastVisit: "2024-02-08", totalSpent: "Rp 900,000",   status: "active" },
-  { id: 6, name: "Fajar Ramadhan", phone: "086789012345", email: "fajar@example.com",   totalBookings: 5,  lastVisit: "2024-01-15", totalSpent: "Rp 375,000",   status: "banned", bannedReason: "Inappropriate behavior towards staff" },
-];
 
 const STATUS_FILTER_OPTIONS = [
   { value: "all",    label: "All Status" },
@@ -59,14 +50,32 @@ export default function OwnerCustomers() {
   const [searchQuery, setSearchQuery] = useState("");
   const [filterStatus, setFilterStatus] = useState("all");
 
-  const [showDeleteModal, setShowDeleteModal]   = useState(false);
   const [showEditModal, setShowEditModal]       = useState(false);
   const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
   const [isLoading, setIsLoading]               = useState(false);
 
-  const currentUser = getUser();
+  const { user, logout } = useAuth();
 
-  useEffect(() => { setCustomers(DUMMY_CUSTOMERS); }, []);
+  const formatSpent = (amount: number) =>
+    `Rp ${amount.toLocaleString("id-ID")}`;
+
+  const loadCustomers = () => {
+    ownerService.getCustomers().then((data) => {
+      setCustomers(data.map((c) => ({
+        id:            c.id,
+        name:          c.name,
+        phone:         c.phone,
+        email:         c.email,
+        totalBookings: c.total_bookings,
+        lastVisit:     c.last_visit ?? "-",
+        totalSpent:    formatSpent(c.total_spent),
+        status:        c.status,
+        bannedReason:  c.banned_reason ?? undefined,
+      })));
+    }).catch(() => {});
+  };
+
+  useEffect(() => { loadCustomers(); }, []);
 
   const stats = useMemo(() => ({
     total:  customers.length,
@@ -120,44 +129,23 @@ export default function OwnerCustomers() {
   };
 
   const handleSaveEdit = async (data: Record<string, any>) => {
+    if (!selectedCustomer) return;
     setIsLoading(true);
     try {
-      await new Promise((resolve) => setTimeout(resolve, 1500));
-      setCustomers((prev) =>
-        prev.map((customer) =>
-          customer.id === selectedCustomer?.id
-            ? { ...customer, status: data.status as "active" | "banned", bannedReason: data.status === "banned" ? data.bannedReason : undefined }
-            : customer
-        )
-      );
+      await ownerService.updateCustomerStatus(selectedCustomer.id, {
+        status:        data.status as "active" | "banned",
+        banned_reason: data.status === "banned" ? data.bannedReason : undefined,
+      });
+      loadCustomers();
       setShowEditModal(false);
       const action = data.status === "banned" ? "banned" : "reactivated";
-      toast.success("Customer Updated", `${selectedCustomer?.name} has been ${action}.`);
+      toast.success("Customer Updated", `${selectedCustomer.name} has been ${action}.`);
       setSelectedCustomer(null);
     } catch {
       toast.error("Update Failed", "Something went wrong. Please try again.");
     } finally {
       setIsLoading(false);
     }
-  };
-
-  const handleDeleteClick = (customer: Customer) => {
-    setSelectedCustomer(customer);
-    setShowDeleteModal(true);
-  };
-
-  const handleConfirmDelete = () => {
-    if (!selectedCustomer) return;
-    const name = selectedCustomer.name;
-    setCustomers((prev) => prev.filter((c) => c.id !== selectedCustomer.id));
-    setShowDeleteModal(false);
-    setSelectedCustomer(null);
-    toast.success("Customer Deleted", `${name} has been removed.`);
-  };
-
-  const handleCancelDelete = () => {
-    setShowDeleteModal(false);
-    setSelectedCustomer(null);
   };
 
   const columns = [
@@ -185,8 +173,7 @@ export default function OwnerCustomers() {
       className: "text-right",
       render: (customer: Customer) => (
         <ActionButtons actions={[
-          { type: "edit",   onClick: () => handleEditClick(customer)   },
-          { type: "delete", onClick: () => handleDeleteClick(customer) },
+          { type: "edit", onClick: () => handleEditClick(customer) },
         ]} />
       ),
     },
@@ -199,7 +186,7 @@ export default function OwnerCustomers() {
       showSidebar
       menuItems={ownerMenu}
       logo={ownerLogo}
-      userProfile={currentUser ?? { name: "owner", email: "owner@cutbro.com", role: "owner" }}
+      userProfile={user ?? { name: "owner", email: "owner@cutbro.com", role: "owner" }}
       showNotification
       notificationCount={3}
       onLogout={logout}
@@ -236,7 +223,7 @@ export default function OwnerCustomers() {
                   { label: "Last Visit",     value: customer.lastVisit      },
                   { label: "Total Spent",    value: customer.totalSpent     },
                 ]}
-                actions={<ActionButtons actions={[{ type: "edit", onClick: () => handleEditClick(customer) }, { type: "delete", onClick: () => handleDeleteClick(customer) }]} />}
+                actions={<ActionButtons actions={[{ type: "edit", onClick: () => handleEditClick(customer) }]} />}
               />
             )}
           />
@@ -244,7 +231,6 @@ export default function OwnerCustomers() {
       </div>
 
       <EditModal isOpen={showEditModal} onClose={() => { setShowEditModal(false); setSelectedCustomer(null); }} onSave={handleSaveEdit} title="Update Customer Status" subtitle="Change account status and provide reason if banning. Other customer details are locked." fields={editFields} initialData={selectedCustomer || {}} isLoading={isLoading} saveButtonText="Update Status" />
-      <DeleteModal isOpen={showDeleteModal} title="Delete Customer" itemName={selectedCustomer?.name || ""} onConfirm={handleConfirmDelete} onCancel={handleCancelDelete} />
     </DashboardLayout>
   );
 }

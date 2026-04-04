@@ -6,7 +6,8 @@ import {
 } from "lucide-react";
 
 import { ownerLogo, ownerMenu } from "@/components/config/Menu";
-import { logout, getUser } from "@/lib/auth";
+import { useAuth } from "@/components/context/AuthContext";
+import * as ownerService from "@/services/owner.service";
 
 import { useToast } from "@/components/ui/Toast";
 
@@ -36,15 +37,6 @@ const DEFAULT_HOURS: OperatingHour[] = DAYS.map((day) => ({
   openTime: "09:00",
   closeTime: "21:00",
 }));
-
-const DUMMY_DATA: Barbershop = {
-  name: "CutBro Barbershop",
-  address: "Jl. Malioboro No. 12, Yogyakarta, DI Yogyakarta 55213",
-  phone: "+62 812-3456-7890",
-  description: "Premium barbershop with professional barbers and modern equipment.",
-  photos: [],
-  operatingHours: DEFAULT_HOURS,
-};
 
 /* ================= HELPERS ================= */
 function FieldWarning({ message }: { message: string }) {
@@ -76,15 +68,40 @@ function SectionCard({ title, icon: Icon, children }: {
 }
 
 /* ================= MAIN PAGE ================= */
+const EMPTY_SHOP: Barbershop = {
+  name: "", address: "", phone: "", description: "", photos: [], operatingHours: DEFAULT_HOURS,
+};
+
 export default function OwnerBarbershop() {
   const toast = useToast();
+  const { user, logout } = useAuth();
 
-  const [shop, setShop]           = useState<Barbershop>(DUMMY_DATA);
-  const [savedShop, setSavedShop] = useState<Barbershop>(DUMMY_DATA);
+  const [shop, setShop]           = useState<Barbershop>(EMPTY_SHOP);
+  const [savedShop, setSavedShop] = useState<Barbershop>(EMPTY_SHOP);
   const [submitted, setSubmitted] = useState(false);
   const [isSaving, setIsSaving]   = useState(false);
 
-  const currentUser = getUser();
+  useEffect(() => {
+    ownerService.getBarbershopProfile().then((data) => {
+      const mapped: Barbershop = {
+        name:        data.name,
+        address:     data.address,
+        phone:       data.phone,
+        description: data.description ?? "",
+        photos:      data.photos ?? [],
+        operatingHours: data.operational_hours?.length
+          ? data.operational_hours.map((h) => ({
+              day:       h.day,
+              isOpen:    h.is_open,
+              openTime:  h.open_time?.slice(0, 5) ?? "09:00",
+              closeTime: h.close_time?.slice(0, 5) ?? "21:00",
+            }))
+          : DEFAULT_HOURS,
+      };
+      setShop(mapped);
+      setSavedShop(mapped);
+    }).catch(() => {});
+  }, []);
 
   const hasChanges = useMemo(
     () => JSON.stringify(shop) !== JSON.stringify(savedShop),
@@ -146,7 +163,18 @@ export default function OwnerBarbershop() {
     }
     setIsSaving(true);
     try {
-      await new Promise((r) => setTimeout(r, 1400));
+      const formData = new FormData();
+      formData.append("name",        shop.name);
+      formData.append("address",     shop.address);
+      formData.append("phone",       shop.phone);
+      formData.append("description", shop.description);
+      shop.operatingHours.forEach((h, i) => {
+        formData.append(`operational_hours[${i}][day]`,        h.day);
+        formData.append(`operational_hours[${i}][is_open]`,    h.isOpen ? "1" : "0");
+        formData.append(`operational_hours[${i}][open_time]`,  h.openTime);
+        formData.append(`operational_hours[${i}][close_time]`, h.closeTime);
+      });
+      await ownerService.updateBarbershopProfile(formData);
       setSavedShop(shop);
       toast.success("Changes Saved!", "Barbershop info updated successfully.");
     } catch {
@@ -163,7 +191,7 @@ export default function OwnerBarbershop() {
       showSidebar
       menuItems={ownerMenu}
       logo={ownerLogo}
-      userProfile={currentUser ?? { name: "owner", email: "owner@cutbro.com", role: "owner" }}
+      userProfile={user ?? { name: "owner", email: "owner@cutbro.com", role: "owner" }}
       showNotification
       notificationCount={3}
       onLogout={logout}

@@ -3,13 +3,9 @@ import { useState, useEffect, useMemo } from "react";
 import { Scissors, UserCheck, UserX, Plus } from "lucide-react";
 
 import { ownerLogo, ownerMenu } from "@/components/config/Menu";
-import { logout, getUser } from "@/lib/auth";
+import { useAuth } from "@/components/context/AuthContext";
 
-import {
-  searchInObject,
-  filterByField,
-  capitalizeFirst,
-} from "@/lib/utils/AdminUtils";
+import { searchInObject, filterByField, capitalizeFirst } from "@/lib/utils/AdminUtils";
 
 import Badge from "@/components/admin/Badge";
 import DeleteModal from "@/components/admin/DeleteModal";
@@ -24,26 +20,17 @@ import MobileCardList from "@/components/admin/MobileCardList";
 import MobileCard from "@/components/admin/MobileCard";
 
 import { useToast } from "@/components/ui/Toast";
+import api from "@/services/api";
+import * as ownerService from "@/services/owner.service";
 
 /* ================= TYPES ================= */
 interface Barber {
   id: number;
   name: string;
-  phone: string;
   email: string;
-  experience: string;
-  specialization: string;
+  bio: string;
   status: "active" | "inactive";
 }
-
-/* ================= DUMMY DATA ================= */
-const DUMMY_BARBERS: Barber[] = [
-  { id: 1, name: "John Barber",  phone: "081234567890", email: "john@example.com",  experience: "5 years", specialization: "Modern Haircuts", status: "active"   },
-  { id: 2, name: "Mike Stylist", phone: "082345678901", email: "mike@example.com",  experience: "3 years", specialization: "Beard Styling",   status: "active"   },
-  { id: 3, name: "David Cut",    phone: "083456789012", email: "david@example.com", experience: "2 years", specialization: "Classic Cuts",    status: "inactive" },
-  { id: 4, name: "Ryan Style",   phone: "084567890123", email: "ryan@example.com",  experience: "4 years", specialization: "Hair Coloring",   status: "active"   },
-  { id: 5, name: "Alex Master",  phone: "085678901234", email: "alex@example.com",  experience: "6 years", specialization: "Premium Styling", status: "active"   },
-];
 
 const STATUS_FILTER_OPTIONS = [
   { value: "all",      label: "All Status" },
@@ -51,18 +38,12 @@ const STATUS_FILTER_OPTIONS = [
   { value: "inactive", label: "Inactive"   },
 ];
 
-const STATUS_STYLES = {
-  active:   "success" as const,
-  inactive: "danger"  as const,
-};
-
-const STATUS_DOT_COLORS = {
-  active:   "bg-green-500" as const,
-  inactive: "bg-red-500"   as const,
-};
+const STATUS_STYLES    = { active: "success" as const, inactive: "danger" as const };
+const STATUS_DOT_COLORS = { active: "bg-green-500" as const, inactive: "bg-red-500" as const };
 
 export default function OwnerBarbers() {
   const toast = useToast();
+  const { user, logout } = useAuth();
 
   const [barbers, setBarbers]           = useState<Barber[]>([]);
   const [searchQuery, setSearchQuery]   = useState("");
@@ -74,136 +55,91 @@ export default function OwnerBarbers() {
   const [selectedBarber, setSelectedBarber]   = useState<Barber | null>(null);
   const [isLoading, setIsLoading]             = useState(false);
 
-  const currentUser = getUser();
+  const loadBarbers = () => {
+    ownerService.getBarbers().then((data) => {
+      setBarbers((data as any[]).map((b: any) => ({
+        id:     b.id,
+        name:   b.user?.name ?? b.name ?? "-",
+        email:  b.user?.email ?? "-",
+        bio:    b.bio ?? "-",
+        status: b.status === "available" ? "active" : "inactive",
+      })));
+    }).catch(() => {});
+  };
 
-  useEffect(() => {
-    setBarbers(DUMMY_BARBERS);
-  }, []);
+  useEffect(() => { loadBarbers(); }, []);
 
-  /* ================= STATS ================= */
   const stats = useMemo(() => ({
     total:    barbers.length,
     active:   barbers.filter((b) => b.status === "active").length,
     inactive: barbers.filter((b) => b.status === "inactive").length,
   }), [barbers]);
 
-  /* ================= FILTER ================= */
   const filteredBarbers = useMemo(() => {
     return barbers.filter((barber) => {
-      const matchesSearch = searchInObject(barber, searchQuery, ["name", "specialization"]);
+      const matchesSearch = searchInObject(barber, searchQuery, ["name", "email", "bio"]);
       return matchesSearch && filterByField(barber, "status", filterStatus);
     });
   }, [barbers, searchQuery, filterStatus]);
 
-  /* ================= FORM FIELDS ================= */
-  const formFields: FormField[] = [
-    {
-      name: "name",
-      label: "Full Name",
-      type: "text",
-      placeholder: "Enter barber's name",
-      required: true,
-      validation: (value) => value.length >= 3 ? null : "Name must be at least 3 characters",
-    },
-    {
-      name: "phone",
-      label: "Phone Number",
-      type: "text",
-      placeholder: "081234567890",
-      required: true,
-      validation: (value) => /^08[0-9]{8,11}$/.test(value) ? null : "Invalid phone number format",
-      helperText: "Format: 08xxxxxxxxxx",
-    },
-    {
-      name: "email",
-      label: "Email Address",
-      type: "email",
-      placeholder: "barber@example.com",
-      required: true,
-      validation: (value) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value) ? null : "Invalid email format",
-    },
-    {
-      name: "experience",
-      label: "Years of Experience",
-      type: "text",
-      placeholder: "e.g., 5 years",
-      required: true,
-      helperText: "Format: X years",
-    },
-    {
-      name: "specialization",
-      label: "Specialization",
-      type: "text",
-      placeholder: "e.g., Modern Haircuts",
-      required: true,
-      helperText: "What this barber specializes in",
-    },
-    {
-      name: "status",
-      label: "Status",
-      type: "select",
-      required: true,
-      options: [
-        { value: "active",   label: "Active"   },
-        { value: "inactive", label: "Inactive" },
-      ],
-    },
+  /* Form fields — Add: requires name, email, password */
+  const addFormFields: FormField[] = [
+    { name: "name",     label: "Full Name",      type: "text",     placeholder: "Barber's full name",    required: true, validation: (v) => v.length >= 3 ? null : "Name must be at least 3 characters" },
+    { name: "email",    label: "Email Address",  type: "email",    placeholder: "barber@example.com",    required: true, validation: (v) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v) ? null : "Invalid email format" },
+    { name: "password", label: "Password",       type: "text",     placeholder: "Minimum 6 characters",  required: true, validation: (v) => v.length >= 6 ? null : "Password must be at least 6 characters", helperText: "Login credentials for this barber" },
+    { name: "bio",      label: "Bio / Notes",    type: "textarea", placeholder: "e.g., 5 years experience, specializes in modern cuts", rows: 3 },
   ];
 
-  /* ================= ADD HANDLER ================= */
+  /* Form fields — Edit: only bio and status */
+  const editFormFields: FormField[] = [
+    { name: "name",   label: "Full Name",    type: "text",     disabled: true, helperText: "Name cannot be changed here" },
+    { name: "email",  label: "Email",        type: "email",    disabled: true },
+    { name: "bio",    label: "Bio / Notes",  type: "textarea", placeholder: "e.g., 5 years experience...", rows: 3 },
+    { name: "status", label: "Status",       type: "select",   required: true, options: [{ value: "active", label: "Active" }, { value: "inactive", label: "Inactive" }] },
+  ];
+
+  /* ================= ADD ================= */
   const handleAddClick = () => setShowAddModal(true);
 
   const handleSaveAdd = async (data: Record<string, any>) => {
     setIsLoading(true);
     try {
-      await new Promise((resolve) => setTimeout(resolve, 1500));
-      const newId = Math.max(...barbers.map((b) => b.id), 0) + 1;
-      const newBarber: Barber = {
-        id:             newId,
-        name:           data.name,
-        phone:          data.phone,
-        email:          data.email,
-        experience:     data.experience,
-        specialization: data.specialization,
-        status:         data.status as "active" | "inactive",
-      };
-      setBarbers((prev) => [...prev, newBarber]);
+      await api.post("/owner/barbers", {
+        name:     data.name,
+        email:    data.email,
+        password: data.password,
+        bio:      data.bio ?? null,
+      });
+      loadBarbers();
       setShowAddModal(false);
       toast.success("Barber Added", `${data.name} has been added successfully.`);
-    } catch {
-      toast.error("Add Failed", "Something went wrong. Please try again.");
+    } catch (err: any) {
+      const msg = err?.response?.data?.errors
+        ? Object.values(err.response.data.errors).flat()[0]
+        : "Something went wrong. Please try again.";
+      toast.error("Add Failed", msg as string);
     } finally {
       setIsLoading(false);
     }
   };
 
-  /* ================= EDIT HANDLER ================= */
+  /* ================= EDIT ================= */
   const handleEditClick = (barber: Barber) => {
     setSelectedBarber(barber);
     setShowEditModal(true);
   };
 
   const handleSaveEdit = async (data: Record<string, any>) => {
+    if (!selectedBarber) return;
     setIsLoading(true);
     try {
-      await new Promise((resolve) => setTimeout(resolve, 1500));
-      setBarbers((prev) =>
-        prev.map((barber) =>
-          barber.id === selectedBarber?.id
-            ? {
-                ...barber,
-                name:           data.name,
-                phone:          data.phone,
-                email:          data.email,
-                experience:     data.experience,
-                specialization: data.specialization,
-                status:         data.status as "active" | "inactive",
-              }
-            : barber
-        )
-      );
+      await api.put(`/owner/barbers/${selectedBarber.id}`, {
+        bio:    data.bio ?? null,
+        status: data.status === "active" ? "available" : "off",
+      });
+      loadBarbers();
       setShowEditModal(false);
-      toast.success("Barber Updated", `${data.name} has been updated successfully.`);
+      toast.success("Barber Updated", `${selectedBarber.name} has been updated.`);
       setSelectedBarber(null);
     } catch {
       toast.error("Update Failed", "Something went wrong. Please try again.");
@@ -212,16 +148,21 @@ export default function OwnerBarbers() {
     }
   };
 
-  /* ================= DELETE HANDLER ================= */
+  /* ================= DELETE ================= */
   const handleDeleteClick = (barber: Barber) => {
     setSelectedBarber(barber);
     setShowDeleteModal(true);
   };
 
-  const handleConfirmDelete = () => {
+  const handleConfirmDelete = async () => {
     if (!selectedBarber) return;
     const name = selectedBarber.name;
-    setBarbers((prev) => prev.filter((b) => b.id !== selectedBarber.id));
+    try {
+      await ownerService.deleteBarber(selectedBarber.id);
+      loadBarbers();
+    } catch {
+      toast.error("Delete Failed", "Something went wrong. Please try again.");
+    }
     setShowDeleteModal(false);
     setSelectedBarber(null);
     toast.success("Barber Deleted", `${name} has been removed.`);
@@ -232,7 +173,6 @@ export default function OwnerBarbers() {
     setSelectedBarber(null);
   };
 
-  /* ================= TABLE COLUMNS ================= */
   const columns = [
     {
       key: "name",
@@ -240,30 +180,16 @@ export default function OwnerBarbers() {
       render: (barber: Barber) => (
         <div className="text-white">
           <p className="font-semibold">{barber.name}</p>
-          <p className="text-xs text-[#B8B8B8]">{barber.phone}</p>
+          <p className="text-xs text-[#B8B8B8]">{barber.email}</p>
         </div>
       ),
     },
-    {
-      key: "specialization",
-      header: "Specialization",
-      render: (barber: Barber) => <span className="text-[#B8B8B8]">{barber.specialization}</span>,
-    },
-    {
-      key: "experience",
-      header: "Experience",
-      render: (barber: Barber) => <span className="text-[#B8B8B8]">{barber.experience}</span>,
-    },
+    { key: "bio",    header: "Bio",    render: (barber: Barber) => <span className="text-[#B8B8B8] max-w-[200px] truncate block">{barber.bio}</span> },
     {
       key: "status",
       header: "Status",
       render: (barber: Barber) => (
-        <Badge
-          text={capitalizeFirst(barber.status)}
-          variant={STATUS_STYLES[barber.status]}
-          showDot
-          dotColor={STATUS_DOT_COLORS[barber.status]}
-        />
+        <Badge text={capitalizeFirst(barber.status)} variant={STATUS_STYLES[barber.status]} showDot dotColor={STATUS_DOT_COLORS[barber.status]} />
       ),
     },
     {
@@ -272,12 +198,10 @@ export default function OwnerBarbers() {
       headerClassName: "text-right",
       className: "text-right",
       render: (barber: Barber) => (
-        <ActionButtons
-          actions={[
-            { type: "edit",   onClick: () => handleEditClick(barber)   },
-            { type: "delete", onClick: () => handleDeleteClick(barber) },
-          ]}
-        />
+        <ActionButtons actions={[
+          { type: "edit",   onClick: () => handleEditClick(barber)   },
+          { type: "delete", onClick: () => handleDeleteClick(barber) },
+        ]} />
       ),
     },
   ];
@@ -289,7 +213,7 @@ export default function OwnerBarbers() {
       showSidebar
       menuItems={ownerMenu}
       logo={ownerLogo}
-      userProfile={currentUser ?? { name: "owner", email: "owner@cutbro.com", role: "owner" }}
+      userProfile={user ?? { name: "owner", email: "owner@cutbro.com", role: "owner" }}
       showNotification
       notificationCount={3}
       onLogout={logout}
@@ -299,9 +223,9 @@ export default function OwnerBarbers() {
 
         <StatsGrid
           stats={[
-            { icon: Scissors, title: "Total Barber",    value: stats.total    },
-            { icon: UserCheck, title: "Barber Active",  value: stats.active   },
-            { icon: UserX,     title: "Barber Inactive", value: stats.inactive },
+            { icon: Scissors,  title: "Total Barber",     value: stats.total    },
+            { icon: UserCheck, title: "Barber Active",    value: stats.active   },
+            { icon: UserX,     title: "Barber Inactive",  value: stats.inactive },
           ]}
           columns={3}
         />
@@ -322,62 +246,19 @@ export default function OwnerBarbers() {
             renderCard={(barber: Barber) => (
               <MobileCard
                 title={barber.name}
-                subtitle={<p className="text-xs text-[#B8B8B8]">{barber.phone}</p>}
-                badge={<span className="text-xs text-[#B8B8B8]">{barber.experience}</span>}
-                headerRight={
-                  <Badge
-                    text={capitalizeFirst(barber.status)}
-                    variant={STATUS_STYLES[barber.status]}
-                    showDot
-                    dotColor={STATUS_DOT_COLORS[barber.status]}
-                  />
-                }
-                fields={[{ label: "Specialization", value: barber.specialization }]}
-                actions={
-                  <ActionButtons
-                    actions={[
-                      { type: "edit",   onClick: () => handleEditClick(barber)   },
-                      { type: "delete", onClick: () => handleDeleteClick(barber) },
-                    ]}
-                  />
-                }
+                subtitle={<p className="text-xs text-[#B8B8B8]">{barber.email}</p>}
+                headerRight={<Badge text={capitalizeFirst(barber.status)} variant={STATUS_STYLES[barber.status]} showDot dotColor={STATUS_DOT_COLORS[barber.status]} />}
+                fields={[{ label: "Bio", value: barber.bio }]}
+                actions={<ActionButtons actions={[{ type: "edit", onClick: () => handleEditClick(barber) }, { type: "delete", onClick: () => handleDeleteClick(barber) }]} />}
               />
             )}
           />
         </TableCard>
       </div>
 
-      <EditModal
-        isOpen={showAddModal}
-        onClose={() => setShowAddModal(false)}
-        onSave={handleSaveAdd}
-        title="Add New Barber"
-        subtitle="Create a new barber profile"
-        fields={formFields}
-        initialData={{ name: "", phone: "", email: "", experience: "", specialization: "", status: "active" }}
-        isLoading={isLoading}
-        saveButtonText="Add Barber"
-      />
-
-      <EditModal
-        isOpen={showEditModal}
-        onClose={() => { setShowEditModal(false); setSelectedBarber(null); }}
-        onSave={handleSaveEdit}
-        title="Edit Barber"
-        subtitle="Update barber information"
-        fields={formFields}
-        initialData={selectedBarber || {}}
-        isLoading={isLoading}
-        saveButtonText="Save Changes"
-      />
-
-      <DeleteModal
-        isOpen={showDeleteModal}
-        title="Delete Barber"
-        itemName={selectedBarber?.name || ""}
-        onConfirm={handleConfirmDelete}
-        onCancel={handleCancelDelete}
-      />
+      <EditModal isOpen={showAddModal} onClose={() => setShowAddModal(false)} onSave={handleSaveAdd} title="Add New Barber" subtitle="Create a new barber account" fields={addFormFields} initialData={{ name: "", email: "", password: "", bio: "" }} isLoading={isLoading} saveButtonText="Add Barber" />
+      <EditModal isOpen={showEditModal} onClose={() => { setShowEditModal(false); setSelectedBarber(null); }} onSave={handleSaveEdit} title="Edit Barber" subtitle="Update barber information" fields={editFormFields} initialData={selectedBarber || {}} isLoading={isLoading} saveButtonText="Save Changes" />
+      <DeleteModal isOpen={showDeleteModal} title="Delete Barber" itemName={selectedBarber?.name || ""} onConfirm={handleConfirmDelete} onCancel={handleCancelDelete} />
     </DashboardLayout>
   );
 }
