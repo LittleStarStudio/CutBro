@@ -7,6 +7,18 @@ use App\Http\Controllers\Api\BarbershopController;
 use App\Http\Controllers\Api\Owner\ServiceCategoryController;
 use App\Http\Controllers\Api\Owner\ServiceController;
 use App\Http\Controllers\Api\Owner\BarberController;
+use App\Http\Controllers\Api\Owner\DashboardController as OwnerDashboardController;
+use App\Http\Controllers\Api\Owner\BarbershopProfileController;
+use App\Http\Controllers\Api\Owner\ShiftController as OwnerShiftController;
+use App\Http\Controllers\Api\Owner\ShiftAssignmentController;
+use App\Http\Controllers\Api\Owner\ScheduleController as OwnerScheduleController;
+use App\Http\Controllers\Api\Owner\PromoController;
+use App\Http\Controllers\Api\Owner\CustomerController as OwnerCustomerController;
+use App\Http\Controllers\Api\Owner\PaymentSettingController;
+use App\Http\Controllers\Api\Owner\TransactionController as OwnerTransactionController;
+use App\Http\Controllers\Api\Owner\RefundController;
+use App\Http\Controllers\Api\Owner\BarberReportController;
+use App\Http\Controllers\Api\Admin\BarbershopController as AdminBarbershopController;
 
 use App\Http\Controllers\Api\Owner\BookingController as OwnerBookingController;
 use App\Http\Controllers\Api\Customer\BookingController as CustomerBookingController;
@@ -141,7 +153,62 @@ Route::prefix('owner')->group(function () {
         Route::get('/bookings', [OwnerListBookingController::class, 'index']);
         Route::patch('/bookings/{booking}/status', [OwnerBookingController::class, 'updateStatus']);
 
+        // Dashboard stats
+        Route::get('/dashboard', [OwnerDashboardController::class, 'stats']);
+
+        // Barbershop profile + operational hours
+        Route::get('/barbershop', [BarbershopProfileController::class, 'show']);
+        Route::post('/barbershop', [BarbershopProfileController::class, 'update']);
+
+        // Shifts (3 preset: morning, afternoon, evening)
+        Route::get('/shifts', [OwnerShiftController::class, 'index']);
+        Route::put('/shifts', [OwnerShiftController::class, 'upsert']);
+
+        // Shift assignments (barber per hari)
+        Route::get('/shift-assignments', [ShiftAssignmentController::class, 'index']);
+        Route::post('/shift-assignments', [ShiftAssignmentController::class, 'store']);
+        Route::put('/shift-assignments/{assignment}', [ShiftAssignmentController::class, 'update']);
+        Route::delete('/shift-assignments/{assignment}', [ShiftAssignmentController::class, 'destroy']);
+
+        // Schedule (attendance monitor — read-only)
+        Route::get('/schedule', [OwnerScheduleController::class, 'index']);
+
+        // Promos
+        Route::get('/promos', [PromoController::class, 'index']);
+        Route::post('/promos', [PromoController::class, 'store']);
+        Route::put('/promos/{promo}', [PromoController::class, 'update']);
+        Route::delete('/promos/{promo}', [PromoController::class, 'destroy']);
+
+        // Customers
+        Route::get('/customers', [OwnerCustomerController::class, 'index']);
+        Route::patch('/customers/{user}/status', [OwnerCustomerController::class, 'updateStatus']);
+
+        // Payment settings
+        Route::get('/payment-settings', [PaymentSettingController::class, 'show']);
+        Route::put('/payment-settings', [PaymentSettingController::class, 'upsert']);
+
+        // Transactions
+        Route::get('/transactions', [OwnerTransactionController::class, 'index']);
+
+        // Refunds
+        Route::get('/refunds', [RefundController::class, 'index']);
+        Route::patch('/refunds/{booking}/status', [RefundController::class, 'updateStatus']);
+
+        // Barber report
+        Route::get('/barbers/report', [BarberReportController::class, 'index']);
+
     });
+});
+
+// Admin
+Route::prefix('admin')->middleware(['auth:sanctum', 'verified.api', 'token.expired', 'role:super_admin'])->group(function () {
+
+    // Barbershop management
+    Route::get('/barbershops/stats', [AdminBarbershopController::class, 'stats']);
+    Route::get('/barbershops', [AdminBarbershopController::class, 'index']);
+    Route::put('/barbershops/{id}', [AdminBarbershopController::class, 'update']);
+    Route::delete('/barbershops/{id}', [AdminBarbershopController::class, 'destroy']);
+
 });
 
 // Customer

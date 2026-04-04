@@ -16,7 +16,8 @@ class Barbershop extends Model
         'address',
         'city',
         'phone',
-        'status'
+        'status',
+        'subscription_plan',
     ];
 
     // Relatonal tables
