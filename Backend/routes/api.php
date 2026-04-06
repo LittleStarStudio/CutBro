@@ -19,6 +19,7 @@ use App\Http\Controllers\Api\Owner\TransactionController as OwnerTransactionCont
 use App\Http\Controllers\Api\Owner\RefundController;
 use App\Http\Controllers\Api\Owner\BarberReportController;
 use App\Http\Controllers\Api\Admin\BarbershopController as AdminBarbershopController;
+use App\Http\Controllers\Api\Admin\UserController as AdminUserController;
 
 use App\Http\Controllers\Api\Owner\BookingController as OwnerBookingController;
 use App\Http\Controllers\Api\Customer\BookingController as CustomerBookingController;
@@ -208,6 +209,12 @@ Route::prefix('admin')->middleware(['auth:sanctum', 'verified.api', 'token.expir
     Route::get('/barbershops', [AdminBarbershopController::class, 'index']);
     Route::put('/barbershops/{id}', [AdminBarbershopController::class, 'update']);
     Route::delete('/barbershops/{id}', [AdminBarbershopController::class, 'destroy']);
+
+    // User management
+    Route::get('/users/stats', [AdminUserController::class, 'stats']);
+    Route::get('/users', [AdminUserController::class, 'index']);
+    Route::put('/users/{id}', [AdminUserController::class, 'update']);
+    Route::delete('/users/{id}', [AdminUserController::class, 'destroy']);
 
 });
 

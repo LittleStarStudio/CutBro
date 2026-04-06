@@ -40,6 +40,38 @@ export interface UpdateBarbershopPayload {
   status?:            string;
 }
 
+export interface UserStats {
+  total: number;
+  customers: number;
+  barbers: number;
+  owners: number;
+}
+
+export interface AdminUser {
+  id: number;
+  name: string;
+  email: string;
+  role: string;
+  status: string;
+  join_date: string;
+  last_login: string | null;
+}
+
+export interface PaginatedUsers {
+  data: AdminUser[];
+  current_page: number;
+  last_page: number;
+  per_page: number;
+  total: number;
+}
+
+export interface UpdateUserPayload {
+  name?: string;
+  email?: string;
+  role?: string;
+  status?: string;
+}
+
 /* ================================================================
    HELPERS
 ================================================================ */
@@ -69,3 +101,23 @@ export const updateAdminBarbershop = (id: number, data: UpdateBarbershopPayload)
 
 export const deleteAdminBarbershop = (id: number) =>
   api.delete(`/admin/barbershops/${id}`);
+
+/* ================================================================
+   Users MANAGEMENT (Admin)
+================================================================ */
+
+export const getUserStats = (): Promise<UserStats> =>
+  api
+    .get<{ success: boolean; data: UserStats }>("/admin/users/stats")
+    .then(unwrap<UserStats>);
+
+export const getAdminUsers = (): Promise<PaginatedUsers> =>
+  api
+    .get<{ success: boolean; data: PaginatedUsers }>("/admin/users", { params: { page: 1, per_page: 500 } })
+    .then(unwrap<PaginatedUsers>);
+
+export const updateAdminUser = (id: number, data: UpdateUserPayload) =>
+  api.put(`/admin/users/${id}`, data);
+
+export const deleteAdminUser = (id: number) =>
+  api.delete(`/admin/users/${id}`);

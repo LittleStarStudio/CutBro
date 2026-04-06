@@ -1,12 +1,12 @@
 import DashboardLayout from "@/components/dashboard/DashboardLayout";
 import { useState, useEffect, useMemo } from "react";
-import { Users, User, Scissors } from "lucide-react";
+import { Users, User, Scissors, Store } from "lucide-react";
 
 import StatsGrid from "@/components/admin/StatGrid";
 import { superAdminLogo, superAdminMenu } from "@/components/config/Menu";
-import { logout, getUser } from "@/lib/auth";
-
-import type { User as UserType } from "@/type/AdminType";
+import { useAuth } from "@/components/context/AuthContext";
+import * as adminService from "@/services/admin.service";
+import type { AdminUser } from "@/services/admin.service";
 
 import {
   searchInObject,
@@ -33,319 +33,87 @@ import EditModal, { type FormField } from "@/components/admin/EditModal";
 
 import { useToast } from "@/components/ui/Toast";
 
-/* ================= TYPES ================= */
-interface ExtendedUserType extends UserType {
-  username?: string;
-  lastLogin?: string;
-  loginFrequency?: number;
-  totalBookings?: number;
-  totalSpending?: number;
-  device?: string;
-  location?: string;
-}
-
-/* ================= DUMMY DATA ================= */
-const DUMMY_USERS: ExtendedUserType[] = [
-  {
-    id: 1,
-    name: "John Doe",
-    email: "john@example.com",
-    username: "johndoe",
-    phone: "+62 812-3456-7890",
-    role: "customer",
-    status: "active",
-    joinDate: "2024-01-15",
-    lastLogin: "2026-02-13 08:30",
-    loginFrequency: 45,
-    totalBookings: 12,
-    totalSpending: 1250000,
-    device: "Mobile - Android",
-    location: "Jakarta, Indonesia",
-  },
-  {
-    id: 2,
-    name: "Jane Smith",
-    email: "jane@example.com",
-    username: "janesmith",
-    phone: "+62 813-4567-8901",
-    role: "barber",
-    status: "active",
-    joinDate: "2024-01-20",
-    lastLogin: "2026-02-13 07:15",
-    loginFrequency: 120,
-    totalBookings: 0,
-    totalSpending: 0,
-    device: "Desktop - Windows",
-    location: "Bandung, Indonesia",
-  },
-  {
-    id: 3,
-    name: "Alice Brown",
-    email: "alice@example.com",
-    username: "alicebrown",
-    phone: "+62 814-5678-9012",
-    role: "owner",
-    status: "active",
-    joinDate: "2024-02-01",
-    lastLogin: "2026-02-12 22:45",
-    loginFrequency: 80,
-    totalBookings: 0,
-    totalSpending: 0,
-    device: "Mobile - iOS",
-    location: "Surabaya, Indonesia",
-  },
-  {
-    id: 4,
-    name: "Bob Wilson",
-    email: "bob@example.com",
-    username: "bobwilson",
-    phone: "+62 815-6789-0123",
-    role: "customer",
-    status: "inactive",
-    joinDate: "2024-02-05",
-    lastLogin: "2026-01-20 14:30",
-    loginFrequency: 8,
-    totalBookings: 3,
-    totalSpending: 350000,
-    device: "Mobile - Android",
-    location: "Yogyakarta, Indonesia",
-  },
-  {
-    id: 5,
-    name: "Charlie Davis",
-    email: "charlie@example.com",
-    username: "charlied",
-    phone: "+62 816-7890-1234",
-    role: "customer",
-    status: "banned",
-    joinDate: "2024-03-10",
-    lastLogin: "2026-02-01 10:20",
-    loginFrequency: 25,
-    totalBookings: 5,
-    totalSpending: 500000,
-    device: "Desktop - MacOS",
-    location: "Bali, Indonesia",
-  },
-];
-
-/* ================= COMPONENT ================= */
 export default function UsersManagement() {
   const toast = useToast();
+  const { user, logout } = useAuth();
 
-  const [users, setUsers] = useState<ExtendedUserType[]>([]);
+  const [users, setUsers] = useState<AdminUser[]>([]);
+  const [stats, setStats] = useState({ total: 0, customers: 0, barbers: 0, owners: 0 });
+
   const [searchQuery, setSearchQuery] = useState("");
   const [filterRole, setFilterRole] = useState("all");
   const [filterStatus, setFilterStatus] = useState("all");
 
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
-  const [selectedUser, setSelectedUser] = useState<ExtendedUserType | null>(null);
+  const [selectedUser, setSelectedUser] = useState<AdminUser | null>(null);
   const [isLoading, setIsLoading] = useState(false);
 
-  const currentUser = getUser();
+  /* ================= LOAD ================= */
 
-  useEffect(() => {
-    setUsers(DUMMY_USERS);
-  }, []);
+  const loadStats = async () => {
+    try {
+      const data = await adminService.getUserStats();
+      setStats(data);
+    } catch { /* silent */ }
+  };
 
-  /* ================= STATS ================= */
-  const stats = useMemo(() => {
-    return {
-      total: users.length,
-      customers: users.filter((u) => u.role === "customer").length,
-      barbers: users.filter((u) => u.role === "barber").length,
-      owners: users.filter((u) => u.role === "owner").length,
-      activeUsers: users.filter((u) => u.status === "active").length,
-    };
-  }, [users]);
+  const loadUsers = async () => {
+    try {
+      const result = await adminService.getAdminUsers();
+      setUsers(result.data);
+    } catch { /* silent */ }
+  };
+
+  useEffect(() => { loadStats(); loadUsers(); }, []);
 
   /* ================= FILTER ================= */
-  const filteredUsers = useMemo(() => {
-    return users.filter((user) => {
-      const matchesSearch = searchInObject(user, searchQuery, [
-        "name",
-        "email",
-        "phone",
-        "username",
-      ]);
 
+  const filteredUsers = useMemo(() => {
+    return users.filter((u) => {
+      const matchesSearch = searchInObject(u, searchQuery, ["name", "email"]);
       return (
         matchesSearch &&
-        filterByField(user, "role", filterRole) &&
-        filterByField(user, "status", filterStatus)
+        filterByField(u, "role", filterRole) &&
+        filterByField(u, "status", filterStatus)
       );
     });
   }, [users, searchQuery, filterRole, filterStatus]);
 
-  /* ================= FORMAT CURRENCY ================= */
-  const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat("id-ID", {
-      style: "currency",
-      currency: "IDR",
-      minimumFractionDigits: 0,
-    }).format(amount);
-  };
+  /* ================= EDIT ================= */
 
-  /* ================= EDIT HANDLER ================= */
-  const handleEditClick = (user: ExtendedUserType) => {
-    setSelectedUser(user);
-    setShowEditModal(true);
-  };
-
-  const handleSaveEdit = async (data: Record<string, any>) => {
-    setIsLoading(true);
-    try {
-      await new Promise((resolve) => setTimeout(resolve, 1500));
-      setUsers((prev) =>
-        prev.map((user) =>
-          user.id === selectedUser?.id ? { ...user, ...data } : user
-        )
-      );
-      setShowEditModal(false);
-      toast.success("User Updated", `${selectedUser?.name} has been updated successfully.`);
-      setSelectedUser(null);
-    } catch {
-      toast.error("Update Failed", "Something went wrong. Please try again.");
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  /* ================= DELETE ================= */
-  const handleDeleteClick = (user: ExtendedUserType) => {
-    setSelectedUser(user);
-    setShowDeleteModal(true);
-  };
-
-  const handleConfirmDelete = () => {
-    if (!selectedUser) return;
-    const name = selectedUser.name;
-    setUsers((prev) => prev.filter((u) => u.id !== selectedUser.id));
-    setShowDeleteModal(false);
-    setSelectedUser(null);
-    toast.success("User Deleted", `${name} has been removed.`);
-  };
-
-  /* ================= TABLE COLUMNS ================= */
-  const columns = [
-    {
-      key: "user",
-      header: "User",
-      render: (user: ExtendedUserType) => (
-        <div>
-          <p className="text-white font-semibold">{user.name}</p>
-          <p className="text-xs text-muted-foreground">{user.email}</p>
-          <p className="text-xs text-muted-foreground">{user.phone}</p>
-        </div>
-      ),
-    },
-    {
-      key: "username",
-      header: "Username",
-      render: (user: ExtendedUserType) => (
-        <span className="font-mono text-xs text-muted-foreground">
-          @{user.username}
-        </span>
-      ),
-    },
-    {
-      key: "role",
-      header: "Role",
-      render: (user: ExtendedUserType) => (
-        <Badge
-          text={capitalizeFirst(user.role)}
-          variant={USER_ROLE_STYLES[user.role]}
-        />
-      ),
-    },
-    {
-      key: "status",
-      header: "Status",
-      render: (user: ExtendedUserType) => (
-        <Badge
-          text={capitalizeFirst(user.status)}
-          variant={USER_STATUS_STYLES[user.status]}
-          showDot
-          dotColor={STATUS_DOT_COLORS[user.status]}
-        />
-      ),
-    },
-    {
-      key: "joinDate",
-      header: "Join Date",
-      render: (user: ExtendedUserType) => (
-        <span className="text-xs text-muted-foreground">{user.joinDate}</span>
-      ),
-    },
-    {
-      key: "lastLogin",
-      header: "Last Login",
-      render: (user: ExtendedUserType) => (
-        <span className="text-xs text-muted-foreground">{user.lastLogin}</span>
-      ),
-    },
-    {
-      key: "actions",
-      header: "Actions",
-      align: "right" as const,
-      render: (user: ExtendedUserType) => (
-        <ActionButtons
-          actions={[
-            { type: "edit", onClick: () => handleEditClick(user) },
-            { type: "delete", onClick: () => handleDeleteClick(user) },
-          ]}
-        />
-      ),
-    },
-  ];
-
-  /* ================= EDIT MODAL FIELDS ================= */
   const editFields: FormField[] = [
     {
       name: "name",
       label: "Full Name",
       type: "text",
+      required: true,
       placeholder: "Enter full name",
-      required: true,
-      validation: (value) => {
-        return value.length >= 3 ? null : "Name must be at least 3 characters";
+      validation: (v) => {
+        const trimmed = (v ?? "").trim();
+        if (!trimmed) return "Full Name cannot be spaces only";
+        if (trimmed.length < 3) return "Full Name must be at least 3 characters";
+        if (trimmed.length > 100) return "Full Name cannot exceed 100 characters";
+        return null;
       },
-    },
-    {
-      name: "username",
-      label: "Username",
-      type: "text",
-      placeholder: "Enter username",
-      required: true,
-      validation: (value) => {
-        const usernameRegex = /^[a-z0-9_]+$/;
-        return usernameRegex.test(value)
-          ? null
-          : "Username can only contain lowercase letters, numbers, and underscores";
-      },
-      helperText: "Lowercase letters, numbers, and underscores only",
     },
     {
       name: "email",
       label: "Email Address",
       type: "email",
-      placeholder: "Enter email",
       required: true,
-      validation: (value) => {
-        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-        return emailRegex.test(value) ? null : "Invalid email format";
-      },
-    },
-    {
-      name: "phone",
-      label: "Phone Number",
-      type: "text",
-      placeholder: "+62 812-3456-7890",
-      required: true,
-      validation: (value) => {
-        return value.length >= 10
-          ? null
-          : "Phone number must be at least 10 characters";
+      placeholder: "Enter email address",
+      validation: (v) => {
+        const trimmed = (v ?? "").trim();
+        if (!trimmed) return "Email Address cannot be empty";
+        if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmed))
+          return "Invalid email format (e.g. user@example.com)";
+        if (trimmed.length > 255) return "Email Address is too long (max 255 characters)";
+        const emailTaken = users.some(
+          (u) => u.email.toLowerCase() === trimmed.toLowerCase() && u.id !== selectedUser?.id
+        );
+        if (emailTaken) return "Email address is already in use by another user";
+        return null;
       },
     },
     {
@@ -355,9 +123,13 @@ export default function UsersManagement() {
       required: true,
       options: [
         { value: "customer", label: "Customer" },
-        { value: "barber", label: "Barber" },
-        { value: "owner", label: "Owner" },
+        { value: "barber",   label: "Barber"   },
+        { value: "owner",    label: "Owner"    },
       ],
+      validation: (v) =>
+        ["customer", "barber", "owner"].includes(v)
+          ? null
+          : "Please select a valid role",
     },
     {
       name: "status",
@@ -365,55 +137,176 @@ export default function UsersManagement() {
       type: "select",
       required: true,
       options: [
-        { value: "active", label: "Active" },
+        { value: "active",   label: "Active"   },
         { value: "inactive", label: "Inactive" },
-        { value: "banned", label: "Banned" },
+        { value: "banned",   label: "Banned"   },
       ],
-    },
-    {
-      name: "location",
-      label: "Location",
-      type: "text",
-      placeholder: "e.g., Jakarta, Indonesia",
+      validation: (v) =>
+        ["active", "inactive", "banned"].includes(v)
+          ? null
+          : "Please select a valid status",
     },
   ];
 
+
+  const handleEditClick = (u: AdminUser) => {
+    setSelectedUser(u);
+    setShowEditModal(true);
+  };
+
+  const handleSaveEdit = async (data: Record<string, string | number>) => {
+    if (!selectedUser) return;
+    const target = selectedUser;   // ← tangkap ke const lokal
+    setIsLoading(true);
+    try {
+      await adminService.updateAdminUser(target.id, {
+        name:   data.name as string,
+        email:  data.email as string,
+        role:   data.role as string,
+        status: data.status as string,
+      });
+      setShowEditModal(false);
+      setSelectedUser(null);
+      toast.success("User Updated", `${target.name} updated successfully.`);
+      await Promise.all([loadStats(), loadUsers()]);
+    } catch {
+      toast.error("Update Failed", "Something went wrong. Please try again.");
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  /* ================= DELETE ================= */
+
+  const handleDeleteClick = (u: AdminUser) => {
+    if (u.status !== "banned") {
+      toast.error("Cannot Delete", "Only banned users can be deleted.");
+      return;
+    }
+    setSelectedUser(u);
+    setShowDeleteModal(true);
+  };
+
+  const handleConfirmDelete = async () => {
+    if (!selectedUser) return;
+    const target = selectedUser;   // ← tangkap ke const lokal
+    const name = target.name;
+    try {
+      await adminService.deleteAdminUser(target.id);
+      setShowDeleteModal(false);
+      setSelectedUser(null);
+      toast.success("User Deleted", `${name} has been removed.`);
+      await Promise.all([loadStats(), loadUsers()]);
+    } catch {
+      toast.error("Delete Failed", "Something went wrong. Please try again.");
+    }
+  };
+
+  /* ================= TABLE COLUMNS ================= */
+
+  const columns = useMemo(
+    () => [
+      {
+        key: "user",
+        header: "User",
+        render: (u: AdminUser) => (
+          <div className="min-w-[160px]">
+            <p className="text-white font-semibold truncate max-w-[180px]">{u.name}</p>
+            <p className="text-xs text-muted-foreground">{u.email}</p>
+          </div>
+        ),
+      },
+      {
+        key: "role",
+        header: "Role",
+        render: (u: AdminUser) => (
+          <Badge text={capitalizeFirst(u.role)} variant={USER_ROLE_STYLES[u.role]} />
+        ),
+      },
+      {
+        key: "status",
+        header: "Status",
+        render: (u: AdminUser) => (
+          <Badge
+            text={capitalizeFirst(u.status)}
+            variant={USER_STATUS_STYLES[u.status]}
+            showDot
+            dotColor={STATUS_DOT_COLORS[u.status]}
+          />
+        ),
+      },
+      {
+        key: "join_date",
+        header: "Join Date",
+        render: (u: AdminUser) => (
+          <span className="text-xs text-muted-foreground whitespace-nowrap">{u.join_date}</span>
+        ),
+      },
+      {
+        key: "last_login",
+        header: "Last Login",
+        render: (u: AdminUser) => (
+          <span className="text-xs text-muted-foreground whitespace-nowrap">
+            {u.last_login ?? "-"}
+          </span>
+        ),
+      },
+      {
+        key: "actions",
+        header: "Actions",
+        headerClassName: "text-center",
+        className: "text-center",
+        render: (u: AdminUser) => (
+          <ActionButtons
+            actions={[
+              { type: "edit",   onClick: () => handleEditClick(u)   },
+              { type: "delete", onClick: () => handleDeleteClick(u) },
+            ]}
+          />
+        ),
+      },
+    ],
+    [handleEditClick, handleDeleteClick]
+  );
+
   /* ================= UI ================= */
+
   return (
     <DashboardLayout
       title="Users Management"
-      subtitle="Manage all registered barbershops"
+      subtitle="Manage all registered users"
       showSidebar
       menuItems={superAdminMenu}
       logo={superAdminLogo}
       userProfile={
-        currentUser ?? {
-          name: "Super Admin",
+        user ?? {
+          name:  "Super Admin",
           email: "admin@cutbro.com",
-          role: "admin",
+          role:  "admin",
         }
       }
       showNotification
       notificationCount={3}
       onLogout={logout}
     >
-      <div className="w-full space-y-6 lg:space-y-8">
+      <div className="w-full space-y-4 sm:space-y-6 lg:space-y-8">
 
         {/* ================= STATS ================= */}
         <StatsGrid
-          columns={3}
+          columns={4}
           stats={[
-            { icon: Users, title: "Total Users", value: stats.total },
-            { icon: User, title: "Active Users", value: stats.activeUsers },
-            { icon: Scissors, title: "Barbers", value: stats.barbers },
+            { icon: Users,    title: "Total Users", value: stats.total,     iconBgColor: "bg-[#22C55E1A]", iconColor: "text-[#22C55E]" },
+            { icon: User,     title: "Customers",   value: stats.customers, iconBgColor: "bg-[#60A5FA1A]", iconColor: "text-[#60A5FA]" },
+            { icon: Scissors, title: "Barbers",     value: stats.barbers,   iconBgColor: "bg-[#F59E0B1A]", iconColor: "text-[#F59E0B]" },
+            { icon: Store,    title: "Owners",      value: stats.owners,    iconBgColor: "bg-[#C084FC1A]", iconColor: "text-[#C084FC]" },
           ]}
         />
 
-        {/* ================= TABLE ================= */}
+        {/* ================= TABLE CARD ================= */}
         <TableCard
           searchQuery={searchQuery}
           setSearchQuery={setSearchQuery}
-          searchPlaceholder="Search users by name, email, username..."
+          searchPlaceholder="Search users by name, email..."
           filters={[
             {
               label: "Role",
@@ -433,70 +326,55 @@ export default function UsersManagement() {
           emptyTitle="No users found"
           emptyDescription="Try adjusting your filters"
         >
-          <DataTable data={filteredUsers} columns={columns} />
+          {/* DESKTOP TABLE */}
+          <div className="hidden md:block w-full overflow-x-auto">
+            <DataTable data={filteredUsers} columns={columns} />
+          </div>
 
-          <MobileCardList
-            data={filteredUsers}
-            renderCard={(user) => (
-              <MobileCard
-                title={user.name}
-                subtitle={
-                  <span className="text-xs font-mono">@{user.username}</span>
-                }
-                headerRight={
-                  <Badge
-                    text={capitalizeFirst(user.status)}
-                    variant={USER_STATUS_STYLES[user.status]}
-                    showDot
-                    dotColor={STATUS_DOT_COLORS[user.status]}
-                  />
-                }
-                fields={[
-                  { label: "Email", value: user.email },
-                  { label: "Phone", value: user.phone },
-                  {
-                    label: "Role",
-                    value: (
-                      <Badge
-                        text={capitalizeFirst(user.role)}
-                        variant={USER_ROLE_STYLES[user.role]}
-                      />
-                    ),
-                  },
-                  { label: "Joined", value: user.joinDate },
-                  { label: "Last Login", value: user.lastLogin },
-                  ...(user.role === "customer"
-                    ? [
-                        {
-                          label: "Bookings",
-                          value: String(user.totalBookings),
-                        },
-                        {
-                          label: "Total Spent",
-                          value: (
-                            <span className="text-[#D4AF37]">
-                              {formatCurrency(user.totalSpending || 0)}
-                            </span>
-                          ),
-                        },
-                      ]
-                    : []),
-                ]}
-                actions={
-                  <ActionButtons
-                    actions={[
-                      { type: "edit", onClick: () => handleEditClick(user) },
-                      { type: "delete", onClick: () => handleDeleteClick(user) },
-                    ]}
-                  />
-                }
-              />
-            )}
-          />
+          {/* MOBILE CARDS */}
+          <div className="block md:hidden">
+            <MobileCardList
+              data={filteredUsers}
+              renderCard={(u) => (
+                <MobileCard
+                  title={u.name}
+                  subtitle={<span className="text-xs text-muted-foreground">{u.email}</span>}
+                  headerRight={
+                    <Badge
+                      text={capitalizeFirst(u.status)}
+                      variant={USER_STATUS_STYLES[u.status]}
+                      showDot
+                      dotColor={STATUS_DOT_COLORS[u.status]}
+                    />
+                  }
+                  fields={[
+                    {
+                      label: "Role",
+                      value: <Badge text={capitalizeFirst(u.role)} variant={USER_ROLE_STYLES[u.role]} />,
+                    },
+                    { label: "Joined",     value: u.join_date         },
+                    { label: "Last Login", value: u.last_login ?? "-" },
+                  ]}
+                  actions={
+                    <ActionButtons
+                      align="end"
+                      actions={[
+                        { type: "edit",   onClick: () => handleEditClick(u)   },
+                        { type: "delete", onClick: () => handleDeleteClick(u) },
+                      ]}
+                    />
+                  }
+                />
+              )}
+            />
+          </div>
         </TableCard>
+
+        {/* ================= PAGINATION ================= */}
+        
       </div>
 
-      {/* ================= EDIT MODAL ================= */}
+      {/* ================= MODALS ================= */}
       <EditModal
         isOpen={showEditModal}
         onClose={() => {
@@ -507,15 +385,14 @@ export default function UsersManagement() {
         title="Edit User"
         subtitle="Update user information and permissions"
         fields={editFields}
-        initialData={selectedUser || {}}
+        initialData={selectedUser ?? {}}
         isLoading={isLoading}
       />
 
-      {/* ================= DELETE MODAL ================= */}
       <DeleteModal
         isOpen={showDeleteModal}
         title="Delete User"
-        itemName={selectedUser?.name || ""}
+        itemName={selectedUser?.name ?? ""}
         onConfirm={handleConfirmDelete}
         onCancel={() => setShowDeleteModal(false)}
       />

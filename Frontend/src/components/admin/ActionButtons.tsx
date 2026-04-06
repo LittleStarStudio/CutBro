@@ -9,9 +9,10 @@ interface Action {
 
 interface ActionButtonsProps {
   actions: Action[];
+  align?: "center" | "end";
 }
 
-export default function ActionButtons({ actions }: ActionButtonsProps) {
+export default function ActionButtons({ actions, align = "center" }: ActionButtonsProps) {
   const getIcon = (type: Action["type"]) => {
     switch (type) {
       case "view":
@@ -38,7 +39,7 @@ export default function ActionButtons({ actions }: ActionButtonsProps) {
   };
 
   return (
-    <div className="flex items-center justify-end gap-1">
+    <div className={`flex items-center gap-1 ${align === "end" ? "justify-end" : "justify-center"}`}>
       {actions.map((action, index) => {
         const buttonClass = getButtonClass(action.type);
         const icon = getIcon(action.type);

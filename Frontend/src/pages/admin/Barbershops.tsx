@@ -208,94 +208,104 @@ export default function Barbershops() {
 
   /* ================= TABLE COLUMNS ================= */
 
-  const columns = useMemo(
-    () => [
-      {
-        key: "name",
-        header: "Shop",
-        render: (shop: Barbershop) => (
-          <div className="min-w-[140px]">
-            <p className="text-white font-semibold truncate max-w-[160px]">{shop.name}</p>
-            <p className="text-xs text-muted-foreground flex items-center gap-1">
-              <MapPin size={12} />
-              <span className="truncate max-w-[120px]">{shop.location}</span>
-            </p>
-          </div>
-        ),
-      },
-      {
-        key: "owner",
-        header: "Owner",
-        render: (shop: Barbershop) => (
-          <span className="text-muted-foreground whitespace-nowrap min-w-[100px] block">
-            {shop.owner}
-          </span>
-        ),
-      },
-      {
-        key: "plan",
-        header: "Plan",
-        render: (shop: Barbershop) => (
-          <div className="min-w-[80px]">
-            <Badge text={shop.plan} variant={PLAN_STYLES[shop.plan]} />
-          </div>
-        ),
-      },
-      {
-        key: "barbers",
-        header: "Barbers",
-        render: (shop: Barbershop) => (
-          <span className="whitespace-nowrap">{shop.barbers}</span>
-        ),
-      },
-      {
-        key: "revenue",
-        header: "Revenue",
-        render: (shop: Barbershop) => (
-          <span className="font-medium whitespace-nowrap min-w-[80px] block">{shop.revenue}</span>
-        ),
-      },
-      {
-        key: "rate",
-        header: "Rate",
-        render: (shop: Barbershop) => (
-          <div className="flex items-center gap-1 min-w-[70px]">
-            <Star size={13} className="text-yellow-400 fill-yellow-400 shrink-0" />
-            <span className="font-medium text-white">{shop.rate.toFixed(1)}</span>
-          </div>
-        ),
-      },
-      {
-        key: "status",
-        header: "Status",
-        render: (shop: Barbershop) => (
-          <div className="min-w-[80px]">
-            <Badge
-              text={capitalizeFirst(shop.status)}
-              variant={STATUS_STYLES[shop.status]}
-              showDot
-              dotColor={STATUS_DOT_COLORS[shop.status]}
-            />
-          </div>
-        ),
-      },
-      {
-        key: "actions",
-        header: "Actions",
-        headerClassName: "text-right",
-        className: "text-right",
-        render: (shop: Barbershop) => (
-          <ActionButtons
-            actions={[
-              { type: "edit",   onClick: () => handleEditClick(shop)   },
-              { type: "delete", onClick: () => handleDeleteClick(shop) },
-            ]}
-          />
-        ),
-      },
-    ],
-    [handleEditClick, handleDeleteClick]
-  );
+    const columns = useMemo(
+      () => [
+        {
+          key: "name",
+          header: "Shop",
+          headerClassName: "text-left w-[180px]",
+          render: (shop: Barbershop) => (
+            <div className="w-[180px]">
+              <p className="text-white font-semibold truncate">{shop.name}</p>
+              <p className="text-xs text-muted-foreground flex items-center gap-1">
+                <MapPin size={12} />
+                <span className="truncate">{shop.location}</span>
+              </p>
+            </div>
+          ),
+        },
+        {
+          key: "owner",
+          header: "Owner",
+          headerClassName: "text-left w-[140px]",
+          render: (shop: Barbershop) => (
+            <span className="text-muted-foreground w-[140px] block truncate">
+              {shop.owner}
+            </span>
+          ),
+        },
+        {
+          key: "plan",
+          header: "Plan",
+          headerClassName: "text-left w-[100px]",
+          render: (shop: Barbershop) => (
+            <div className="w-[100px]">
+              <Badge text={shop.plan} variant={PLAN_STYLES[shop.plan]} />
+            </div>
+          ),
+        },
+        {
+          key: "barbers",
+          header: "Barbers",
+          headerClassName: "text-left w-[80px]", // ← ganti text-center jadi text-left
+          className: "text-left",                // ← ganti text-center jadi text-left
+          render: (shop: Barbershop) => (
+            <span className="block text-left w-[80px]">{shop.barbers}</span> // ← text-left
+          ),
+        },
+        {
+          key: "revenue",
+          header: "Revenue",
+          headerClassName: "text-left w-[110px]",
+          render: (shop: Barbershop) => (
+            <span className="font-medium w-[110px] block">{shop.revenue}</span>
+          ),
+        },
+        {
+          key: "rate",
+          header: "Rate",
+          headerClassName: "text-left w-[80px]",
+          render: (shop: Barbershop) => (
+            <div className="flex items-center gap-1 w-[80px]">
+              <Star size={13} className="text-yellow-400 fill-yellow-400 shrink-0" />
+              <span className="font-medium text-white">{shop.rate.toFixed(1)}</span>
+            </div>
+          ),
+        },
+        {
+          key: "status",
+          header: "Status",
+          headerClassName: "text-left w-[100px]",
+          render: (shop: Barbershop) => (
+            <div className="w-[100px]">
+              <Badge
+                text={capitalizeFirst(shop.status)}
+                variant={STATUS_STYLES[shop.status]}
+                showDot
+                dotColor={STATUS_DOT_COLORS[shop.status]}
+              />
+            </div>
+          ),
+        },
+        {
+          key: "actions",
+          header: "Actions",
+          headerClassName: "text-left w-[80px]", 
+          className: "text-left",
+          render: (shop: Barbershop) => (
+            <div className="flex justify-start w-[80px]">
+              <ActionButtons
+                actions={[
+                  { type: "edit",   onClick: () => handleEditClick(shop)   },
+                  { type: "delete", onClick: () => handleDeleteClick(shop) },
+                ]}
+              />
+            </div>
+          ),
+        },
+      ],
+      [handleEditClick, handleDeleteClick]
+    );
 
   /* ================= UI ================= */
 
@@ -416,6 +426,7 @@ export default function Barbershops() {
                   ]}
                   actions={
                     <ActionButtons
+                      align="end"
                       actions={[
                         { type: "edit",   onClick: () => handleEditClick(shop)   },
                         { type: "delete", onClick: () => handleDeleteClick(shop) },

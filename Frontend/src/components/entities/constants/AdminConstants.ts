@@ -61,10 +61,10 @@ export const USER_STATUS_FILTER_OPTIONS = [
 ];
 
 // Badge Styles for User Roles
-export const USER_ROLE_STYLES: Record<string, "default" | "primary" | "success" | "warning" | "danger" | "gold"> = {
+export const USER_ROLE_STYLES: Record<string, "default" | "primary" | "success" | "warning" | "danger" | "gold" | "purple"> = {
   customer: "primary",
-  barber: "success",
-  owner: "gold",
+  barber: "gold",
+  owner: "purple",
 };
 
 // Badge Styles for User Status
