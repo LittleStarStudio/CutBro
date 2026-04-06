@@ -118,8 +118,8 @@ export const LOG_ACTION_FILTER_OPTIONS = [
 // Badge Styles for Log Actions
 export const LOG_ACTION_STYLES: Record<string, "default" | "primary" | "success" | "warning" | "danger" | "gold"> = {
   login: "success",
-  logout: "default",
-  register: "primary",
+  logout: "primary",
+  register: "gold",
 };
 
 // Log Status Filters

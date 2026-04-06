@@ -44,9 +44,22 @@ export function login(user: User) {
 }
 
 export function logout() {
+  const token    = localStorage.getItem("cutbro_token");
+  const location = localStorage.getItem("cutbro_location") ?? "-";
+  if (token) {
+    fetch(`${import.meta.env.VITE_API_BASE_URL}/auth/logout`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ location }),
+    }).catch(() => { /* silent */ });
+  }
   localStorage.removeItem(STORAGE_KEY);
   localStorage.removeItem("cutbro_token");
   localStorage.removeItem("cutbro_refresh_token");
+  localStorage.removeItem("cutbro_location");
   window.dispatchEvent(new Event("cutbro:logout"));
 }
 

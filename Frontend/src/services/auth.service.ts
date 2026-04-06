@@ -53,20 +53,79 @@ function saveSession(data: AuthResponse): User {
 
 /* ── Auth functions ── */
 
+async function getIpLocation(): Promise<string> {
+  try {
+    const res = await fetch("https://ipapi.co/json/", {
+      signal: AbortSignal.timeout(3000),
+    });
+    const data = await res.json() as { city?: string; country_name?: string };
+    if (data.city && data.country_name) return `${data.city}, ${data.country_name}`;
+    if (data.country_name) return data.country_name;
+  } catch { /* silent */ }
+  return "-";
+}
+
+async function reverseGeocode(lat: number, lon: number): Promise<string> {
+  const res = await fetch(
+    `https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lon}&format=json`,
+    {
+      headers: { "Accept-Language": "en" },
+      signal: AbortSignal.timeout(4000),
+    }
+  );
+    const data = await res.json() as {
+    address?: {
+      city?: string; town?: string; village?: string;
+      county?: string; state?: string; country?: string;
+    }
+  };
+  const city = data.address?.city || data.address?.state;
+  const country = data.address?.country;
+  if (city && country) return `${city}, ${country}`;
+  if (country) return country;
+  return "-";
+}
+
+function getLocation(): Promise<string> {
+  return new Promise((resolve) => {
+    if (!navigator.geolocation) {
+      getIpLocation().then(resolve);
+      return;
+    }
+    navigator.geolocation.getCurrentPosition(
+      async (pos) => {
+        try {
+          resolve(await reverseGeocode(pos.coords.latitude, pos.coords.longitude));
+        } catch {
+          resolve("-");
+        }
+      },
+      async () => {
+        resolve(await getIpLocation());
+      },
+      { timeout: 8000, maximumAge: 300_000 }
+    );
+  });
+}
+
 export async function login(payload: LoginPayload): Promise<User> {
+  const location = await getLocation();
+  localStorage.setItem("cutbro_location", location);
   const { data } = await api.post<{ success: boolean; data: AuthResponse }>(
     "/auth/login",
-    payload
+    { ...payload, location }
   );
   return saveSession(data.data);
 }
 
 export async function registerOwner(payload: RegisterOwnerPayload): Promise<void> {
-  await api.post("/auth/register-owner", payload);
+  const location = await getLocation();
+  await api.post("/auth/register-owner", { ...payload, location });
 }
 
 export async function registerCustomer(payload: RegisterCustomerPayload): Promise<void> {
-  await api.post("/auth/register-customer", payload);
+  const location = await getLocation();
+  await api.post("/auth/register-customer", { ...payload, location });
 }
 
 export async function getMe(): Promise<User> {
@@ -80,10 +139,12 @@ export async function getMe(): Promise<User> {
 }
 
 export async function logout(): Promise<void> {
+  const location = localStorage.getItem("cutbro_location") ?? "-";
   try {
-    await api.post("/auth/logout");
+    await api.post("/auth/logout", { location });
   } finally {
     storage.clear();
+    localStorage.removeItem("cutbro_location");
   }
 }
 

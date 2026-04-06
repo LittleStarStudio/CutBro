@@ -3,9 +3,9 @@ import { useState, useEffect, useMemo } from "react";
 import { LogIn, LogOut, UserPlus, Activity } from "lucide-react";
 
 import { superAdminLogo, superAdminMenu } from "@/components/config/Menu";
-import { logout, getUser } from "@/lib/auth";
-
-import type { LoginLog } from "@/type/AdminType";
+import { useAuth } from "@/components/context/AuthContext";
+import * as adminService from "@/services/admin.service";
+import type { AdminLoginLog } from "@/services/admin.service";
 
 import {
   searchInObject,
@@ -26,96 +26,42 @@ import TableCard from "@/components/admin/TableCard";
 import DataTable from "@/components/admin/DataTable";
 import MobileCardList from "@/components/admin/MobileCardList";
 import MobileCard from "@/components/admin/MobileCard";
-
 import Badge from "@/components/admin/Badge";
 
-/* ================= DUMMY DATA ================= */
-
-const DUMMY_LOGS: LoginLog[] = [
-  {
-    id: 1,
-    user: "John Doe",
-    email: "john@example.com",
-    action: "login",
-    timestamp: "2024-02-12 09:30:00",
-    ipAddress: "192.168.1.1",
-    device: "Chrome on Windows",
-    location: "Jakarta, Indonesia",
-    status: "success",
-  },
-  {
-    id: 2,
-    user: "Jane Smith",
-    email: "jane@example.com",
-    action: "logout",
-    timestamp: "2024-02-12 10:15:00",
-    ipAddress: "192.168.1.2",
-    device: "Safari on iPhone",
-    location: "Bandung, Indonesia",
-    status: "success",
-  },
-  {
-    id: 3,
-    user: "Alice Brown",
-    email: "alice@example.com",
-    action: "register",
-    timestamp: "2024-02-12 11:00:00",
-    ipAddress: "192.168.1.3",
-    device: "Firefox on Mac",
-    location: "Surabaya, Indonesia",
-    status: "success",
-  },
-  {
-    id: 4,
-    user: "Bob Wilson",
-    email: "bob@example.com",
-    action: "login",
-    timestamp: "2024-02-12 12:30:00",
-    ipAddress: "192.168.1.4",
-    device: "Edge on Windows",
-    location: "Yogyakarta, Indonesia",
-    status: "failed",
-  },
-];
-
-/* ================= COMPONENT ================= */
-
 export default function LoginLogs() {
-  const [logs, setLogs] = useState<LoginLog[]>([]);
-  const [searchQuery, setSearchQuery] = useState("");
+  const { user, logout } = useAuth();
+
+  const [logs, setLogs]   = useState<AdminLoginLog[]>([]);
+  const [stats, setStats] = useState({ login: 0, logout: 0, register: 0, total: 0 });
+  const [searchQuery, setSearchQuery]   = useState("");
   const [filterAction, setFilterAction] = useState("all");
   const [filterStatus, setFilterStatus] = useState("all");
 
-  const currentUser = getUser();
+  /* ================= LOAD ================= */
 
-  /* ================= FETCH ================= */
+  const loadStats = async () => {
+    try {
+      const data = await adminService.getLoginLogStats();
+      setStats(data);
+    } catch { /* silent */ }
+  };
 
-  useEffect(() => {
-    setLogs(DUMMY_LOGS);
-  }, []);
+  const loadLogs = async () => {
+    try {
+      const result = await adminService.getAdminLoginLogs();
+      setLogs(result.data);
+    } catch { /* silent */ }
+  };
 
-  /* ================= STATS ================= */
-
-  const stats = useMemo(() => {
-    return {
-      login: logs.filter((l) => l.action === "login").length,
-      logout: logs.filter((l) => l.action === "logout").length,
-      register: logs.filter((l) => l.action === "register").length,
-      total: logs.length,
-    };
-  }, [logs]);
+  useEffect(() => { loadStats(); loadLogs(); }, []);
 
   /* ================= FILTER ================= */
 
   const filteredLogs = useMemo(() => {
     return logs.filter((log) => {
       const matchesSearch = searchInObject(log, searchQuery, [
-        "user",
-        "email",
-        "ipAddress",
-        "location",
+        "user", "email", "ipAddress", "location", "device",
       ]);
-
       return (
         matchesSearch &&
         filterByField(log, "action", filterAction) &&
@@ -130,9 +76,10 @@ export default function LoginLogs() {
     {
       key: "user",
       header: "User",
-      render: (log: LoginLog) => (
+      headerClassName: "text-left w-[180px]",
+      render: (log: AdminLoginLog) => (
         <div>
-          <p className="text-white font-semibold">{log.user}</p>
+          <p className="text-white font-semibold truncate max-w-[160px]">{log.user}</p>
           <p className="text-xs text-muted-foreground">{log.email}</p>
         </div>
       ),
@@ -140,40 +87,61 @@ export default function LoginLogs() {
     {
       key: "action",
       header: "Action",
-      render: (log: LoginLog) => (
+      headerClassName: "text-left w-[90px]",
+      render: (log: AdminLoginLog) => (
         <Badge
           text={capitalizeFirst(log.action)}
-          variant={LOG_ACTION_STYLES[log.action]}
+          variant={LOG_ACTION_STYLES[log.action] ?? "default"}
         />
       ),
     },
     {
       key: "timestamp",
       header: "Timestamp",
-      render: (log: LoginLog) => log.timestamp,
+      headerClassName: "text-left w-[140px]",
+      render: (log: AdminLoginLog) => {
+        const d = new Date(log.timestamp);
+        const formatted = d.toLocaleDateString("en-GB", {
+          day: "2-digit", month: "short", year: "numeric",
+        }) + ", " + d.toLocaleTimeString("en-GB", {
+          hour: "2-digit", minute: "2-digit",
+        });
+        return <span className="text-xs text-muted-foreground whitespace-nowrap">{formatted}</span>;
+      },
     },
     {
       key: "ip",
       header: "IP Address",
-      render: (log: LoginLog) => log.ipAddress,
+      headerClassName: "text-left w-[120px]",
+      render: (log: AdminLoginLog) => (
+        <span className="text-xs text-muted-foreground">{log.ipAddress}</span>
+      ),
     },
     {
       key: "location",
       header: "Location",
-      render: (log: LoginLog) => log.location,
+      headerClassName: "text-left w-[140px]",
+      render: (log: AdminLoginLog) => (
+        <span className="text-xs text-muted-foreground">{log.location}</span>
+      ),
     },
     {
       key: "device",
       header: "Device",
-      render: (log: LoginLog) => log.device,
+      headerClassName: "text-left w-[120px]",
+      render: (log: AdminLoginLog) => (
+        <span className="text-xs text-muted-foreground">{log.device}</span>
+      ),
     },
     {
       key: "status",
       header: "Status",
-      render: (log: LoginLog) => (
+      headerClassName: "text-center w-[90px]",
+      className: "text-center",
+      render: (log: AdminLoginLog) => (
         <Badge
           text={capitalizeFirst(log.status)}
-          variant={LOG_STATUS_STYLES[log.status]}
+          variant={LOG_STATUS_STYLES[log.status] ?? "default"}
           showDot
           dotColor={STATUS_DOT_COLORS[log.status]}
         />
@@ -191,10 +159,10 @@ export default function LoginLogs() {
       menuItems={superAdminMenu}
       logo={superAdminLogo}
       userProfile={
-        currentUser ?? {
-          name: "Super Admin",
+        user ?? {
+          name:  "Super Admin",
           email: "admin@cutbro.com",
-          role: "admin",
+          role:  "admin",
         }
       }
       showNotification
@@ -203,14 +171,14 @@ export default function LoginLogs() {
     >
       <div className="space-y-6 lg:space-y-8">
 
-        {/* ================= SMALL STATS (compact) ================= */}
+        {/* ================= STATS ================= */}
         <StatsGrid
           columns={4}
           stats={[
-            { icon: LogIn, title: "Login", value: stats.login },
-            { icon: LogOut, title: "Logout", value: stats.logout },
-            { icon: UserPlus, title: "Register", value: stats.register },
-            { icon: Activity, title: "Total", value: stats.total },
+            { icon: LogIn,    title: "Login",    value: stats.login,    iconBgColor: "bg-[#22C55E1A]", iconColor: "text-[#22C55E]" },
+            { icon: LogOut,   title: "Logout",   value: stats.logout,   iconBgColor: "bg-[#60A5FA1A]", iconColor: "text-[#60A5FA]" },
+            { icon: UserPlus, title: "Register", value: stats.register, iconBgColor: "bg-[#F59E0B1A]", iconColor: "text-[#F59E0B]" },
+            { icon: Activity, title: "Total",    value: stats.total,    iconBgColor: "bg-[#C084FC1A]", iconColor: "text-[#C084FC]" },
           ]}
         />
 
@@ -218,7 +186,7 @@ export default function LoginLogs() {
         <TableCard
           searchQuery={searchQuery}
           setSearchQuery={setSearchQuery}
-          searchPlaceholder="Search logs..."
+          searchPlaceholder="Search logs by user, email, IP, location..."
           filters={[
             {
               label: "Action",
@@ -238,32 +206,46 @@ export default function LoginLogs() {
           emptyTitle="No logs found"
           emptyDescription="Try adjusting your filters"
         >
-          <DataTable data={filteredLogs} columns={columns} />
+          {/* DESKTOP TABLE */}
+          <div className="hidden md:block w-full overflow-x-auto">
+            <DataTable data={filteredLogs} columns={columns} />
+          </div>
 
-          <MobileCardList
-            data={filteredLogs}
-            renderCard={(log) => (
-              <MobileCard
-                title={log.user}
-                subtitle={<span className="text-xs">{log.email}</span>}
-                headerRight={
-                  <Badge
-                    text={capitalizeFirst(log.status)}
-                    variant={LOG_STATUS_STYLES[log.status]}
-                    showDot
-                    dotColor={STATUS_DOT_COLORS[log.status]}
-                  />
-                }
-                fields={[
-                  { label: "Action", value: capitalizeFirst(log.action) },
-                  { label: "Time", value: log.timestamp },
-                  { label: "IP", value: log.ipAddress },
-                  { label: "Location", value: log.location },
-                  { label: "Device", value: log.device },
-                ]}
-              />
-            )}
-          />
+          {/* MOBILE CARDS */}
+          <div className="block md:hidden">
+            <MobileCardList
+              data={filteredLogs}
+              renderCard={(log) => (
+                <MobileCard
+                  title={log.user}
+                  subtitle={<span className="text-xs text-muted-foreground">{log.email}</span>}
+                  headerRight={
+                    <Badge
+                      text={capitalizeFirst(log.status)}
+                      variant={LOG_STATUS_STYLES[log.status] ?? "default"}
+                      showDot
+                      dotColor={STATUS_DOT_COLORS[log.status]}
+                    />
+                  }
+                  fields={[
+                    {
+                      label: "Action",
+                      value: (
+                        <Badge
+                          text={capitalizeFirst(log.action)}
+                          variant={LOG_ACTION_STYLES[log.action] ?? "default"}
+                        />
+                      ),
+                    },
+                    { label: "Time",     value: log.timestamp               },
+                    { label: "IP",       value: log.ipAddress               },
+                    { label: "Location", value: log.location                },
+                    { label: "Device",   value: log.device                  },
+                  ]}
+                />
+              )}
+            />
+          </div>
         </TableCard>
       </div>
     </DashboardLayout>

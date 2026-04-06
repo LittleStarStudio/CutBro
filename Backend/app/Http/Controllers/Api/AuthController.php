@@ -11,6 +11,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Password;
+use Illuminate\Support\Facades\Http;
 use Laravel\Socialite\Facades\Socialite;
 use Illuminate\Support\Str;
 
@@ -519,6 +520,8 @@ class AuthController extends BaseController
         // Email verification
         $user->sendEmailVerificationNotification();
 
+        $this->logLogin($user, $user->email, 'success', null, $request, 'register');
+
         return $this->success([
             'message' => 'Registration successful. Please verify your email and login.',
             'role' => $this->sanitizeRole($user->role),
@@ -579,6 +582,8 @@ class AuthController extends BaseController
         // Email verification
         $user->sendEmailVerificationNotification();
 
+        $this->logLogin($user, $user->email, 'success', null, $request, 'register');
+        
         return $this->success([
             'message' => 'Registration successful. Please verify your email and login.',
             'role' => $this->sanitizeRole($user->role),
@@ -620,6 +625,7 @@ class AuthController extends BaseController
      */
     public function logout(Request $request)
     {
+        $user = $request->user();
         if (!$request->user()) {
             return $this->error('Unauthenticated', 401);
         }
@@ -629,7 +635,8 @@ class AuthController extends BaseController
                 ->where('id', $request->user()->currentAccessToken()->id)
                 ->delete();
 
-        return $this->success('Logged Out');
+        $this->logLogin($user, $user?->email, 'success', null, $request, 'logout');
+        return $this->success([], 'Logged out successfully.');
     }
 
     /**
@@ -640,8 +647,10 @@ class AuthController extends BaseController
      */
     public function logoutAll(Request $request)
     {
+        $user = $request->user();
         $request->user()->tokens()->delete();
 
+        $this->logLogin($user, $user?->email, 'success', null, $request, 'logout');
         return $this->success('Logged out from all devices');
     }
 
@@ -793,16 +802,37 @@ class AuthController extends BaseController
     /**
      * Log login attempt
      */
-    private function logLogin($user, $email, $status, $reason = null, Request $request)
+    private function logLogin($user, $email, $status, $reason = null, Request $request, string $action = 'login')
     {
+        $ip       = $request->ip();
+        $location = $request->input('location') ?: $this->resolveLocation($ip);
+
         LoginLog::create([
-            'user_id' => $user?->id,
-            'email' => $email,
-            'ip_address' => $request->ip(),
-            'device' => $request->header('User-Agent'),
-            'status' => $status,
-            'reason' => $reason
+            'user_id'    => $user?->id,
+            'email'      => $email,
+            'ip_address' => $ip,
+            'device'     => $request->header('User-Agent'),
+            'status'     => $status,
+            'reason'     => $reason,
+            'action'     => $action,
+            'location'   => $location,
         ]);
+    }
+
+    private function resolveLocation(string $ip): string
+    {
+        // IP private/lokal (127.0.0.1, 192.168.x.x, dll)
+        if (filter_var($ip, FILTER_VALIDATE_IP, FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE) === false) {
+            return 'Local';
+        }
+        try {
+            $response = Http::timeout(2)->get("http://ip-api.com/json/{$ip}?fields=city,country,status");
+            $data = $response->json();
+            if (($data['status'] ?? '') === 'success') {
+                return "{$data['city']}, {$data['country']}";
+            }
+        } catch (\Exception $e) { /* silent */ }
+        return '-';
     }
 
     /**

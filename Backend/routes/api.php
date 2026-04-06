@@ -1,9 +1,11 @@
 <?php
 
 use Illuminate\Support\Facades\Route;
+
 use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\ProfileController;
 use App\Http\Controllers\Api\BarbershopController;
+
 use App\Http\Controllers\Api\Owner\ServiceCategoryController;
 use App\Http\Controllers\Api\Owner\ServiceController;
 use App\Http\Controllers\Api\Owner\BarberController;
@@ -18,13 +20,14 @@ use App\Http\Controllers\Api\Owner\PaymentSettingController;
 use App\Http\Controllers\Api\Owner\TransactionController as OwnerTransactionController;
 use App\Http\Controllers\Api\Owner\RefundController;
 use App\Http\Controllers\Api\Owner\BarberReportController;
+use App\Http\Controllers\Api\Owner\BookingController as OwnerBookingController;
+use App\Http\Controllers\Api\Owner\ListBookingController as OwnerListBookingController;
+
 use App\Http\Controllers\Api\Admin\BarbershopController as AdminBarbershopController;
 use App\Http\Controllers\Api\Admin\UserController as AdminUserController;
+use App\Http\Controllers\Api\Admin\LoginLogController as AdminLoginLogController;
 
-use App\Http\Controllers\Api\Owner\BookingController as OwnerBookingController;
 use App\Http\Controllers\Api\Customer\BookingController as CustomerBookingController;
-
-use App\Http\Controllers\Api\Owner\ListBookingController as OwnerListBookingController;
 use App\Http\Controllers\Api\Customer\ListBookingController as CustomerListBookingController;
 
 use App\Models\User;
@@ -215,6 +218,11 @@ Route::prefix('admin')->middleware(['auth:sanctum', 'verified.api', 'token.expir
     Route::get('/users', [AdminUserController::class, 'index']);
     Route::put('/users/{id}', [AdminUserController::class, 'update']);
     Route::delete('/users/{id}', [AdminUserController::class, 'destroy']);
+
+    // Login Log management
+    Route::get('/login-logs/stats', [AdminLoginLogController::class, 'stats']);
+    Route::get('/login-logs', [AdminLoginLogController::class, 'index']);
+
 
 });
 
