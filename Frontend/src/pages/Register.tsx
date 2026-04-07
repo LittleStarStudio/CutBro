@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { Mail, User, Store, AlertCircle, X } from "lucide-react";
+import { Mail, User, Store, AlertCircle, X, Phone } from "lucide-react";
 import axios from "axios";
 
 import Button from "@/components/ui/Button";
@@ -20,6 +20,7 @@ type FormData = {
   password: string;
   confirmPassword: string;
   barbershop_name: string;
+  phone: string;
 };
 
 type Errors = Partial<FormData>;
@@ -52,6 +53,7 @@ export default function Register() {
     password: "",
     confirmPassword: "",
     barbershop_name: "",
+    phone: "",
   });
 
   const [errors, setErrors] = useState<Errors>({});
@@ -86,6 +88,13 @@ export default function Register() {
     if (selectedRole === "owner" && !form.barbershop_name.trim()) {
       newErrors.barbershop_name = "Barbershop name is required.";
     }
+    if (selectedRole === "owner") {
+      if (!form.phone.trim()) {
+        newErrors.phone = "Phone number is required.";
+      } else if (!/^(08|\+628)[0-9]{8,11}$/.test(form.phone.trim())) {
+        newErrors.phone = "Enter a valid Indonesian phone number (e.g. 08123456789).";
+      }
+    }
 
     setErrors(newErrors);
 
@@ -118,10 +127,11 @@ export default function Register() {
     try {
       if (selectedRole === "owner") {
         await registerOwner({
-          name: form.name.trim(),
-          email: form.email.trim(),
-          password: form.password,
+          name:            form.name.trim(),
+          email:           form.email.trim(),
+          password:        form.password,
           barbershop_name: form.barbershop_name.trim(),
+          phone:           form.phone.trim(),
         });
       } else {
         await registerCustomer({
@@ -138,18 +148,22 @@ export default function Register() {
         const message = err.response?.data?.message;
 
         if (status === 422) {
-          const serverErrors = err.response?.data?.errors as Record<string, string[]> | undefined;
-          if (serverErrors) {
-            const mapped: Errors = {};
-            if (serverErrors.name) mapped.name = serverErrors.name[0];
-            if (serverErrors.email) mapped.email = serverErrors.email[0];
-            if (serverErrors.password) mapped.password = serverErrors.password[0];
-            if (serverErrors.barbershop_name) mapped.barbershop_name = serverErrors.barbershop_name[0];
-            setErrors(mapped);
-            setBannerError("Please fix the errors below before continuing.");
-          } else {
-            setBannerError(message ?? "Validation failed. Please check your input.");
-          }
+            const serverErrors = err.response?.data?.errors as Record<string, string[]> | undefined;
+            if (serverErrors) {
+              const mapped: Errors = {};
+              if (serverErrors.name) mapped.name = serverErrors.name[0];
+              if (serverErrors.email) mapped.email = serverErrors.email[0];
+              if (serverErrors.password) mapped.password = serverErrors.password[0];
+              if (serverErrors.barbershop_name) mapped.barbershop_name = serverErrors.barbershop_name[0];
+              if (serverErrors.phone) mapped.phone = serverErrors.phone[0];
+              setErrors(mapped);
+              setBannerError("Please fix the errors below before continuing.");
+            } else {
+              setBannerError(message ?? "Validation failed. Please check your input.");
+            }
+
+        } else if (status === 500) {
+          setBannerError("Server error. Please try again or contact support.");
         } else {
           setBannerError(message ?? "Something went wrong. Please try again.");
         }
@@ -219,6 +233,21 @@ export default function Register() {
               onChange={handleChange}
               placeholder="Enter your barbershop name"
               error={errors.barbershop_name}
+            />
+          )}
+
+          {/* Field phone hanya untuk owner */}
+          {selectedRole === "owner" && (
+            <FormInput
+              label="Phone Number"
+              icon={Phone}
+              name="phone"
+              type="tel"
+              inputMode="tel"
+              value={form.phone}
+              onChange={handleChange}
+              placeholder="e.g. 08123456789"
+              error={errors.phone}
             />
           )}
 

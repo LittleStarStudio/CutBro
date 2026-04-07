@@ -486,10 +486,11 @@ class AuthController extends BaseController
     {
         // Validasi
         $request->validate([
-            'name' => 'required|string|max:100',
-            'email' => 'required|email|unique:users,email',
-            'password' => 'required|min:6',
-            'barbershop_name' => 'required|string|max:150',
+            'name'             => 'required|string|max:100',
+            'email'            => 'required|email|unique:users,email',
+            'password'         => 'required|min:6',
+            'barbershop_name'  => 'required|string|max:150',
+            'phone'            => 'required|string|max:20|unique:barbershops,phone',
         ]);
 
         // Check if owner role exists
@@ -500,12 +501,12 @@ class AuthController extends BaseController
 
         // Create barbershop
         $barbershop = Barbershop::create([
-            'name' => $request->barbershop_name,
-            'slug' => Str::slug($request->barbershop_name) . '-' . Str::random(5),
-            'address' => '-',
-            'city' => '-',
-            'phone' => '-',
-            'status' => 'active'
+            'name'    => $request->barbershop_name,
+            'slug'    => Str::slug($request->barbershop_name) . '-' . Str::random(5),
+            'address' => null,
+            'city'    => null,
+            'phone'   => $request->phone,
+            'status'  => 'active'
         ]);
 
         // Create barbershop owner

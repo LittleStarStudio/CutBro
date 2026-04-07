@@ -52,4 +52,16 @@ class Barbershop extends Model
         return $this->hasMany(OperationalHour::class);
     }
 
+    public function ownerSubscriptions()
+    {
+        return $this->hasMany(OwnerSubscription::class);
+    }
+
+    public function activeSubscription()
+    {
+        return $this->hasOne(OwnerSubscription::class)
+            ->where('status', 'active')
+            ->latest();
+    }
+
 }

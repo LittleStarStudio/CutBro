@@ -12,6 +12,7 @@ export interface RegisterOwnerPayload {
   email: string;
   password: string;
   barbershop_name: string;
+  phone: string;
 }
 
 export interface RegisterCustomerPayload {

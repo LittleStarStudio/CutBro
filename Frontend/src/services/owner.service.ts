@@ -163,6 +163,29 @@ export interface Booking {
   total_price: number;
 }
 
+export interface SubscriptionPlan {
+  id:           number;
+  name:         string;
+  display_name: string;
+  price:        number;
+  description:  string;
+  max_barbers:  number | null;
+}
+
+export interface ActiveSubscription {
+  id:          number;
+  plan:        string;
+  plan_label:  string;
+  status:      string;
+  started_at:  string | null;
+  expired_at:  string | null;
+}
+
+export interface SubscriptionData {
+  active_subscription: ActiveSubscription | null;
+  plans:               SubscriptionPlan[];
+}
+
 /* ================================================================
    HELPERS
 ================================================================ */
@@ -354,3 +377,29 @@ export const getBookings = () =>
 
 export const updateBookingStatus = (id: number, status: string) =>
   api.patch(`/owner/bookings/${id}/status`, { status });
+
+/* ================================================================
+   SUBSCRIPTION
+================================================================ */
+
+export const getPublicPlans = (): Promise<SubscriptionPlan[]> =>
+  api
+    .get<{ success: boolean; data: SubscriptionPlan[] }>("/plans")
+    .then(unwrap<SubscriptionPlan[]>);
+
+export const getMySubscription = (): Promise<SubscriptionData> =>
+  api
+    .get<{ success: boolean; data: SubscriptionData }>("/owner/subscription")
+    .then(unwrap<SubscriptionData>);
+
+export const checkoutPlan = (planId: number): Promise<{
+  snap_token?: string;
+  redirect_url?: string;
+  plan?: string;
+}> =>
+  api
+    .post<{ success: boolean; data: { snap_token?: string; redirect_url?: string; plan?: string } }>(
+      "/owner/subscription/checkout",
+      { plan_id: planId }
+    )
+    .then(unwrap);

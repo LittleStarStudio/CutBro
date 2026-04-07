@@ -1,5 +1,6 @@
-import { Calendar, DollarSign, Users, Scissors, TrendingUp, BarChart2, Award } from "lucide-react";
+import { Calendar, DollarSign, Users, Scissors, TrendingUp, BarChart2, Award, AlertTriangle } from "lucide-react";
 import { useState, useEffect, useMemo } from "react";
+
 
 import { ownerLogo, ownerMenu } from "@/components/config/Menu";
 import { useAuth } from "@/components/context/AuthContext";
@@ -16,7 +17,7 @@ import {
   CartesianGrid,
 } from "recharts";
 import DashboardLayout from "@/components/dashboard/DashboardLayout";
-import { getDashboard, type DashboardData } from "@/services/owner.service";
+import { getDashboard, getMySubscription, type DashboardData, type ActiveSubscription } from "@/services/owner.service";
 
 /* ================= HELPERS ================= */
 
@@ -42,12 +43,21 @@ export default function OwnerDashboard() {
   const [data, setData]       = useState<DashboardData | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
+  const [subscription, setSubscription] = useState<ActiveSubscription | null>(null);
+
   useEffect(() => {
     getDashboard()
       .then(setData)
       .catch(() => {}) // silently fail — halaman tetap render dengan data null
       .finally(() => setIsLoading(false));
   }, []);
+
+  useEffect(() => {
+    getMySubscription()
+      .then((res) => setSubscription(res.active_subscription))
+      .catch(() => {});
+  }, []);
+
 
   const stats = useMemo(() => {
     if (!data) return null;
@@ -82,6 +92,47 @@ export default function OwnerDashboard() {
       onLogout={logout}
     >
       <div className="space-y-6 lg:space-y-8">
+
+        {/* ================= SUBSCRIPTION BANNER ================= */}
+        {subscription && subscription.expired_at && (() => {
+          const daysLeft = Math.ceil(
+            (new Date(subscription.expired_at).getTime() - Date.now()) / (1000 * 60 * 60 * 24)
+          );
+          if (daysLeft > 7) return null;
+
+          const isExpired = daysLeft <= 0;
+
+          return (
+            <div className={`flex items-start gap-3 px-4 py-3 rounded-xl border text-sm ${
+              isExpired
+                ? "bg-red-500/10 border-red-500/30 text-red-400"
+                : "bg-amber-500/10 border-amber-500/30 text-amber-400"
+            }`}>
+              <AlertTriangle className="w-5 h-5 shrink-0 mt-0.5" />
+              <div className="flex-1">
+                {isExpired ? (
+                  <>
+                    <span className="font-semibold">Your subscription has expired.</span>
+                    {" "}Some features may be limited.{" "}
+                  </>
+                ) : (
+                  <>
+                    <span className="font-semibold">
+                      Your {subscription.plan_label} plan expires in {daysLeft} day{daysLeft !== 1 ? "s" : ""}.
+                    </span>
+                    {" "}Renew now to avoid interruption.{" "}
+                  </>
+                )}
+                <button
+                  onClick={() => window.location.href = "/owner/subscription"}
+                  className="underline font-semibold hover:opacity-80 transition-opacity"
+                >
+                  Upgrade Plan →
+                </button>
+              </div>
+            </div>
+          );
+        })()}
 
         {/* ================= STATS ================= */}
         <StatsGrid

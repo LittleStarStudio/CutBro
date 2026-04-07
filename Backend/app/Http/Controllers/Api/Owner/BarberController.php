@@ -25,6 +25,23 @@ class BarberController extends BaseController
 
     public function store(Request $request)
     {
+        $barbershop = $request->user()->barbershop;
+
+        // --- Plan limit check ---
+        $active = $barbershop->activeSubscription()->with('plan')->first();
+
+        if ($active && $active->plan->max_barbers !== null) {
+            $currentCount = $barbershop->barbers()->count();
+            if ($currentCount >= $active->plan->max_barbers) {
+                return $this->error(
+                    'You have reached the barber limit for your current plan (' .
+                    $active->plan->display_name . '). Please upgrade to add more barbers.',
+                    403
+                );
+            }
+        }
+        // --- End plan limit check ---
+
         $data = $request->validate([
             'name' => 'required|string|max:255',
             'email' => 'required|email|unique:users,email',

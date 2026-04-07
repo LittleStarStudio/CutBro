@@ -28,6 +28,8 @@ class DatabaseSeeder extends Seeder
 
             BookingSeeder::class,
             BarbershopUserBlockSeeder::class,
+
+            SubscriptionPlanSeeder::class,
         ]);
         
     }

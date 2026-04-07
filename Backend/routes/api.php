@@ -22,10 +22,13 @@ use App\Http\Controllers\Api\Owner\RefundController;
 use App\Http\Controllers\Api\Owner\BarberReportController;
 use App\Http\Controllers\Api\Owner\BookingController as OwnerBookingController;
 use App\Http\Controllers\Api\Owner\ListBookingController as OwnerListBookingController;
+use App\Http\Controllers\Api\Owner\SubscriptionController as OwnerSubscriptionController;
 
 use App\Http\Controllers\Api\Admin\BarbershopController as AdminBarbershopController;
 use App\Http\Controllers\Api\Admin\UserController as AdminUserController;
 use App\Http\Controllers\Api\Admin\LoginLogController as AdminLoginLogController;
+use App\Http\Controllers\Api\Admin\SubscriptionPlanController as AdminSubscriptionPlanController;
+
 
 use App\Http\Controllers\Api\Customer\BookingController as CustomerBookingController;
 use App\Http\Controllers\Api\Customer\ListBookingController as CustomerListBookingController;
@@ -201,6 +204,10 @@ Route::prefix('owner')->group(function () {
         // Barber report
         Route::get('/barbers/report', [BarberReportController::class, 'index']);
 
+        // Subscription
+        Route::get('/subscription', [OwnerSubscriptionController::class, 'index']);
+        Route::post('/subscription/checkout', [OwnerSubscriptionController::class, 'checkout']);
+
     });
 });
 
@@ -223,6 +230,9 @@ Route::prefix('admin')->middleware(['auth:sanctum', 'verified.api', 'token.expir
     Route::get('/login-logs/stats', [AdminLoginLogController::class, 'stats']);
     Route::get('/login-logs', [AdminLoginLogController::class, 'index']);
 
+    // Subscription plan management
+    Route::get('/subscription-plans', [AdminSubscriptionPlanController::class, 'index']);
+    Route::put('/subscription-plans/{plan}', [AdminSubscriptionPlanController::class, 'update']);
 
 });
 
@@ -245,4 +255,11 @@ Route::prefix('customer')->group(function () {
     });
 
 });
+
+// Public routes
+// Midtrans callback (public — no auth required)
+Route::post('/subscription/callback', [OwnerSubscriptionController::class, 'callback']);
+
+// List subscription plans (for pricing page)
+Route::get('/plans', [AdminSubscriptionPlanController::class, 'index']);
 

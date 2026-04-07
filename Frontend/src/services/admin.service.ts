@@ -99,6 +99,15 @@ export interface PaginatedLoginLogs {
   total:        number;
 }
 
+export interface SubscriptionPlan {
+  id:           number;
+  name:         string;
+  display_name: string;
+  price:        number;
+  description:  string;
+  max_barbers:  number | null;
+}
+
 /* ================================================================
    HELPERS
 ================================================================ */
@@ -164,3 +173,21 @@ export const getAdminLoginLogs = (): Promise<PaginatedLoginLogs> =>
       params: { page: 1, per_page: 500 },
     })
     .then(unwrap<PaginatedLoginLogs>);
+
+/* ================================================================
+   Subscription Plans MANAGEMENT (Admin)
+================================================================ */
+
+export const getSubscriptionPlans = (): Promise<SubscriptionPlan[]> =>
+  api
+    .get<{ success: boolean; data: SubscriptionPlan[] }>("/admin/subscription-plans")
+    .then(unwrap<SubscriptionPlan[]>);
+
+export const updateSubscriptionPlan = (
+  id: number,
+  payload: Partial<Pick<SubscriptionPlan, "display_name" | "price" | "description">>
+): Promise<SubscriptionPlan> =>
+  api
+    .put<{ success: boolean; data: SubscriptionPlan }>(`/admin/subscription-plans/${id}`, payload)
+    .then(unwrap<SubscriptionPlan>);
+

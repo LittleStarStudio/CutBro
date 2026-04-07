@@ -23,6 +23,9 @@ return Application::configure(basePath: dirname(__DIR__))
         commands: __DIR__.'/../routes/console.php',
         health: '/up',
     )
+    ->withSchedule(function (\Illuminate\Console\Scheduling\Schedule $schedule) {
+        $schedule->command('subscriptions:notify-expiry')->dailyAt('08:00');
+    })
     ->withMiddleware(function (Middleware $middleware) {
         $middleware->alias([
             'verified.api' => EnsureEmailVerified::class,
