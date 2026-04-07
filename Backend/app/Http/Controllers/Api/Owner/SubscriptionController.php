@@ -47,6 +47,18 @@ class SubscriptionController extends BaseController
         $barbershop = $request->user()->barbershop;
         $plan       = SubscriptionPlan::findOrFail($request->plan_id);
 
+        // Cegah checkout ulang plan yang sama jika sudah aktif
+        if ($plan->price > 0) {
+            $currentActive = OwnerSubscription::where('barbershop_id', $barbershop->id)
+                ->where('status', 'active')
+                ->where('plan_id', $plan->id)
+                ->exists();
+
+            if ($currentActive) {
+                return $this->error('You already have an active subscription for this plan.', 422);
+            }
+        }
+
         // Free plan: langsung aktifkan tanpa pembayaran
         if ($plan->price === 0) {
             OwnerSubscription::where('barbershop_id', $barbershop->id)
@@ -69,14 +81,21 @@ class SubscriptionController extends BaseController
         // Paid plan: buat Midtrans Snap token
         $orderId = 'SUB-' . $barbershop->id . '-' . time();
 
+        // Hapus pending subscription lama sebelum buat yang baru
+        OwnerSubscription::where('barbershop_id', $barbershop->id)
+            ->where('status', 'pending')
+            ->update(['status' => 'cancelled']);
+
         $subscription = OwnerSubscription::create([
             'barbershop_id'       => $barbershop->id,
             'plan_id'             => $plan->id,
-            'status'              => 'active', // akan di-update setelah bayar
+            'status'              => 'pending',
             'started_at'          => null,
             'expired_at'          => null,
             'midtrans_order_id'   => $orderId,
         ]);
+
+        
 
         \Midtrans\Config::$serverKey    = config('services.midtrans.server_key');
         \Midtrans\Config::$isProduction = config('services.midtrans.is_production');
@@ -163,4 +182,39 @@ class SubscriptionController extends BaseController
 
         return response()->json(['message' => 'OK']);
     }
+
+    // POST /owner/subscription/activate  (dipanggil frontend setelah onSuccess)
+    public function activate(Request $request)
+    {
+        $request->validate([
+            'order_id' => 'required|string',
+        ]);
+
+        $barbershop   = $request->user()->barbershop;
+        $subscription = OwnerSubscription::with('plan')
+            ->where('midtrans_order_id', $request->order_id)
+            ->where('barbershop_id', $barbershop->id)
+            ->where('status', 'pending')
+            ->first();
+
+        if (! $subscription) {
+            return $this->error('Subscription not found or already activated.', 404);
+        }
+
+        OwnerSubscription::where('barbershop_id', $barbershop->id)
+            ->where('status', 'active')
+            ->update(['status' => 'cancelled']);
+
+        $subscription->update([
+            'status'     => 'active',
+            'started_at' => now(),
+            'expired_at' => now()->addMonth(),
+            'paid_at'    => now(),
+        ]);
+
+        $barbershop->update(['subscription_plan' => $subscription->plan->name]);
+
+        return $this->success(['plan' => $subscription->plan->name], 'Subscription activated successfully.');
+    }
+
 }

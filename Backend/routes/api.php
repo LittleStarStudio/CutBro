@@ -207,6 +207,7 @@ Route::prefix('owner')->group(function () {
         // Subscription
         Route::get('/subscription', [OwnerSubscriptionController::class, 'index']);
         Route::post('/subscription/checkout', [OwnerSubscriptionController::class, 'checkout']);
+        Route::post('/subscription/activate', [OwnerSubscriptionController::class, 'activate']);
 
     });
 });

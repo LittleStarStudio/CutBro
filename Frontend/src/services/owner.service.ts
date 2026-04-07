@@ -394,12 +394,21 @@ export const getMySubscription = (): Promise<SubscriptionData> =>
 
 export const checkoutPlan = (planId: number): Promise<{
   snap_token?: string;
+  order_id?: string;
   redirect_url?: string;
   plan?: string;
 }> =>
   api
-    .post<{ success: boolean; data: { snap_token?: string; redirect_url?: string; plan?: string } }>(
+    .post<{ success: boolean; data: { snap_token?: string; order_id?: string; redirect_url?: string; plan?: string } }>(
       "/owner/subscription/checkout",
       { plan_id: planId }
+    )
+    .then(unwrap);
+
+export const activatePlan = (orderId: string): Promise<{ plan: string }> =>
+  api
+    .post<{ success: boolean; data: { plan: string } }>(
+      "/owner/subscription/activate",
+      { order_id: orderId }
     )
     .then(unwrap);

@@ -29,6 +29,7 @@ import OwnerPromos from "./pages/owner/Promos";
 import OwnerCustomers from "./pages/owner/Customer";
 import ReportSalary from "./pages/owner/ReportSallary";
 import Billing from "./pages/Billing";
+import SubscriptionPayment from "@/pages/SubscriptionPayment";
 
 import BarberDashboard from "@/pages/barber/BarberDashboard";
 import BarberBarbershops from "./pages/barber/MyWorkplace";
@@ -80,6 +81,7 @@ function AnimatedRoutes() {
         <Route path="/forgot-password" element={<ForgotPassword />} />
         <Route path="/reset-password" element={<ResetPassword />} />
         <Route path="/billing" element={<ProtectedRoute allow={["owner"]}><Billing /></ProtectedRoute>} />
+        <Route path="/subscription/pay" element={<ProtectedRoute allow={["owner"]}><SubscriptionPayment /></ProtectedRoute>} />
 
         <Route path="/notifications" element={<NotificationRouter />} />
 

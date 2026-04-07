@@ -10,6 +10,7 @@ import PasswordInput from "@/components/auth/PasswordInput";
 
 import { login as apiLogin } from "@/services/auth.service";
 import { useAuth } from "@/components/context/AuthContext";
+import { checkoutPlan } from "@/services/owner.service";
 import { getRoleDashboard } from "@/lib/auth";
 
 /* ================= ERROR BANNER ================= */
@@ -70,7 +71,27 @@ export default function Login() {
     try {
       const user = await apiLogin({ email: email.trim(), password });
       setUser(user);
-      navigate(getRoleDashboard(user.role), { replace: true });
+
+      const chosenPlanId   = sessionStorage.getItem("chosen_plan_id");
+      const chosenPlanName = sessionStorage.getItem("chosen_plan_name");
+
+      if (chosenPlanId && user.role === "owner") {
+        if (chosenPlanName === "free") {
+          try {
+            await checkoutPlan(Number(chosenPlanId));
+          } catch { /* silently fail — owner tetap masuk dashboard */ }
+          sessionStorage.removeItem("chosen_plan_id");
+          sessionStorage.removeItem("chosen_plan_name");
+          sessionStorage.removeItem("chosen_plan_display_name");
+          sessionStorage.removeItem("chosen_plan_price");
+          navigate("/owner", { replace: true });
+        } else {
+          navigate("/subscription/pay", { replace: true });
+        }
+      } else {
+        navigate(getRoleDashboard(user.role), { replace: true });
+      }
+
     } catch (err) {
       if (axios.isAxiosError(err)) {
         const status = err.response?.status;

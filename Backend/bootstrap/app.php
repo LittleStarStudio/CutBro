@@ -24,6 +24,7 @@ return Application::configure(basePath: dirname(__DIR__))
         health: '/up',
     )
     ->withSchedule(function (\Illuminate\Console\Scheduling\Schedule $schedule) {
+        $schedule->command('subscriptions:expire')->dailyAt('00:01');
         $schedule->command('subscriptions:notify-expiry')->dailyAt('08:00');
     })
     ->withMiddleware(function (Middleware $middleware) {

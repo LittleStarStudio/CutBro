@@ -96,9 +96,10 @@ export default function Pricing() {
 
   const handleConfirm = () => {
     if (!selectedPlan) return;
-    // Simpan pilihan plan → diproses setelah owner login
     sessionStorage.setItem("chosen_plan_id", String(selectedPlan.id));
     sessionStorage.setItem("chosen_plan_name", selectedPlan.name);
+    sessionStorage.setItem("chosen_plan_display_name", selectedPlan.display_name);
+    sessionStorage.setItem("chosen_plan_price", String(selectedPlan.price));
     sessionStorage.removeItem("registeredOwner");
     navigate("/login?registered=true", { replace: true });
   };
@@ -271,7 +272,9 @@ export default function Pricing() {
                 <div>
                   <p className="text-sm font-semibold text-blue-400">Next Step</p>
                   <p className="text-xs text-neutral-400 mt-1">
-                    Please verify your email and log in. Your selected plan will be activated after login.
+                    {selectedPlan.price === 0
+                      ? "Free plan will be activated right after you verify your email and log in."
+                      : "After email verification and login, you'll be redirected to the secure payment page."}
                   </p>
                 </div>
               </div>
