@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class OwnerSubscription extends Model
 {
@@ -14,6 +15,7 @@ class OwnerSubscription extends Model
         'expired_at',
         'midtrans_order_id',
         'midtrans_snap_token',
+        'payment_channel',
         'paid_at',
     ];
 
@@ -32,4 +34,10 @@ class OwnerSubscription extends Model
     {
         return $this->belongsTo(SubscriptionPlan::class, 'plan_id');
     }
+
+    public function refundRequest(): HasMany
+    {
+        return $this->hasMany(RefundRequest::class);
+    }
+
 }

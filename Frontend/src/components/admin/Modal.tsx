@@ -12,6 +12,7 @@ export interface ModalProps {
   showCloseButton?: boolean;
   closeOnOutsideClick?: boolean;
   closeOnEscape?: boolean;
+  centerHeader?: boolean;
 }
 
 const Modal: React.FC<ModalProps> = ({
@@ -25,6 +26,7 @@ const Modal: React.FC<ModalProps> = ({
   showCloseButton = true,
   closeOnOutsideClick = true,
   closeOnEscape = true,
+  centerHeader = false,
 }) => {
 
   // Handle escape key
@@ -85,8 +87,8 @@ const Modal: React.FC<ModalProps> = ({
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
-        <div className="flex items-center justify-between px-4 py-4 sm:p-6 border-b border-zinc-800 flex-shrink-0">
-          <div className="flex-1">
+        <div className={`relative flex px-4 py-4 sm:p-6 border-b border-zinc-800 flex-shrink-0 ${centerHeader ? 'justify-center' : 'items-center justify-between'}`}>
+          <div className={centerHeader ? 'text-center' : 'flex-1'}>
             <h2 className="text-lg sm:text-2xl font-bold text-white">{title}</h2>
             {subtitle && (
               <p className="text-xs sm:text-sm text-zinc-400 mt-1">{subtitle}</p>
@@ -95,7 +97,7 @@ const Modal: React.FC<ModalProps> = ({
           {showCloseButton && (
             <button
               onClick={onClose}
-              className="ml-4 p-2 hover:bg-zinc-800 rounded-lg transition-colors"
+              className={`p-2 hover:bg-zinc-800 rounded-lg transition-colors ${centerHeader ? 'absolute right-4 top-4 sm:right-5 sm:top-5' : 'ml-4'}`}
               aria-label="Close modal"
             >
               <X className="text-white" size={20} />

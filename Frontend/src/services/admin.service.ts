@@ -12,32 +12,32 @@ export interface BarbershopStats {
 }
 
 export interface AdminBarbershop {
-  id:       number;
-  name:     string;
-  owner:    string;
+  id: number;
+  name: string;
+  owner: string;
   owner_id: number | null;
   location: string;
-  plan:     string;
-  barbers:  number;
-  status:   string;
-  revenue:  number;
-  rate:     number;
+  plan: string;
+  barbers: number;
+  status: string;
+  revenue: number;
+  rate: number;
 }
 
 export interface PaginatedBarbershops {
-  data:         AdminBarbershop[];
+  data: AdminBarbershop[];
   current_page: number;
-  last_page:    number;
-  per_page:     number;
-  total:        number;
+  last_page: number;
+  per_page: number;
+  total: number;
 }
 
 export interface UpdateBarbershopPayload {
-  name?:              string;
-  owner_name?:        string;
-  city?:              string;
+  name?: string;
+  owner_name?: string;
+  city?: string;
   subscription_plan?: string;
-  status?:            string;
+  status?: string;
 }
 
 export interface UserStats {
@@ -106,6 +106,64 @@ export interface SubscriptionPlan {
   price:        number;
   description:  string;
   max_barbers:  number | null;
+}
+
+export interface TransactionStats {
+  total_transactions: number;
+  success_rate:       number;
+  total_revenue:      number;
+  available_balance:  number;
+}
+
+export interface RefundRequestInfo {
+  id:         number;
+  status:     "pending" | "approved" | "rejected";
+  reason:     string;
+  admin_note: string | null;
+}
+
+export interface AdminTransaction {
+  id: number;
+  transaction_type: 'subscription' | 'booking';
+  order_id: string;
+  buyer_name: string;
+  buyer_email: string;
+  payment_channel: string;
+  amount: number;
+  status: 'success' | 'pending' | 'cancelled' | 'expired';
+  subscription_status: string;   // untuk logic refund
+  paid_at: string | null;
+  created_at: string;
+  refund_request: RefundRequestInfo | null;
+}
+
+
+export interface PaginatedTransactions {
+  data:         AdminTransaction[];
+  current_page: number;
+  last_page:    number;
+  per_page:     number;
+  total:        number;
+}
+
+export interface AdminRefundRequest {
+  id:               number;
+  transaction_type: string;
+  order_id:         string;
+  barbershop_name:  string;
+  requester_email:  string;
+  refund_amount:    number;
+  reason:           string;
+  status:           "pending" | "approved" | "rejected";
+  admin_note:       string | null;
+  created_at:       string;
+}
+
+export interface PaginatedRefundRequests {
+  data:         AdminRefundRequest[];
+  current_page: number;
+  last_page:    number;
+  total:        number;
 }
 
 /* ================================================================
@@ -190,4 +248,53 @@ export const updateSubscriptionPlan = (
   api
     .put<{ success: boolean; data: SubscriptionPlan }>(`/admin/subscription-plans/${id}`, payload)
     .then(unwrap<SubscriptionPlan>);
+
+/* ================================================================
+   Transaction MANAGEMENT (Admin)
+================================================================ */
+
+export const getTransactionStats = (): Promise<TransactionStats> =>
+  api
+    .get<{ success: boolean; data: TransactionStats }>("/admin/transactions/stats")
+    .then(unwrap<TransactionStats>);
+
+export const getAdminTransactions = (
+  page = 1,
+  filters?: { search?: string; status?: string; date_from?: string; date_to?: string }
+): Promise<PaginatedTransactions> =>
+  api
+    .get<{ success: boolean; data: PaginatedTransactions }>("/admin/transactions", {
+      params: { page, ...filters },
+    })
+    .then(unwrap<PaginatedTransactions>);
+
+export const processSubscriptionRefund = (
+  subscriptionId: number,
+  reason: string
+): Promise<void> =>
+  api
+    .post<{ success: boolean }>(`/admin/transactions/${subscriptionId}/refund`, { reason })
+    .then(() => undefined);
+
+export const getAdminRefundRequests = (status?: string): Promise<PaginatedRefundRequests> =>
+  api
+    .get<{ success: boolean; data: PaginatedRefundRequests }>("/admin/refund-requests", {
+      params: status ? { status } : {},
+    })
+    .then(unwrap<PaginatedRefundRequests>);
+
+export const approveRefundRequest = (id: number, adminNote: string): Promise<void> =>
+  api
+    .patch<{ success: boolean }>(`/admin/refund-requests/${id}/approve`, { admin_note: adminNote })
+    .then(() => undefined);
+
+export const rejectRefundRequest = (id: number, adminNote: string): Promise<void> =>
+  api
+    .patch<{ success: boolean }>(`/admin/refund-requests/${id}/reject`, { admin_note: adminNote })
+    .then(() => undefined);
+
+export const syncPendingTransactions = (): Promise<{ synced: number }> =>
+  api
+    .post<{ success: boolean; data: { synced: number } }>("/admin/transactions/sync-pending")
+    .then(unwrap<{ synced: number }>);
 

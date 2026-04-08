@@ -166,10 +166,11 @@ class SubscriptionController extends BaseController
 
             // Aktifkan subscription baru
             $subscription->update([
-                'status'     => 'active',
-                'started_at' => now(),
-                'expired_at' => now()->addMonth(),
-                'paid_at'    => now(),
+                'status'          => 'active',
+                'started_at'      => now(),
+                'expired_at'      => now()->addMonth(),
+                'paid_at'         => now(),
+                'payment_channel' => $request->payment_type,
             ]);
 
             // Update kolom subscription_plan di barbershops
@@ -205,11 +206,25 @@ class SubscriptionController extends BaseController
             ->where('status', 'active')
             ->update(['status' => 'cancelled']);
 
+        // Get payment channel from Midtrans
+        $paymentChannel = null;
+        try {
+            $auth = base64_encode(config('services.midtrans.server_key') . ':');
+            $statusRes = \Illuminate\Support\Facades\Http::withHeaders([
+                'Authorization' => 'Basic ' . $auth,
+            ])->get("https://api.sandbox.midtrans.com/v2/{$subscription->midtrans_order_id}/status");
+
+            $paymentChannel = $statusRes->json('payment_type') ?? null;
+        } catch (\Throwable) {
+            // Tidak fatal
+        }
+
         $subscription->update([
-            'status'     => 'active',
-            'started_at' => now(),
-            'expired_at' => now()->addMonth(),
-            'paid_at'    => now(),
+            'status'          => 'active',
+            'started_at'      => now(),
+            'expired_at'      => now()->addMonth(),
+            'paid_at'         => now(),
+            'payment_channel' => $paymentChannel,
         ]);
 
         $barbershop->update(['subscription_plan' => $subscription->plan->name]);

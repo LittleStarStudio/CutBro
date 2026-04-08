@@ -28,7 +28,7 @@ use App\Http\Controllers\Api\Admin\BarbershopController as AdminBarbershopContro
 use App\Http\Controllers\Api\Admin\UserController as AdminUserController;
 use App\Http\Controllers\Api\Admin\LoginLogController as AdminLoginLogController;
 use App\Http\Controllers\Api\Admin\SubscriptionPlanController as AdminSubscriptionPlanController;
-
+use App\Http\Controllers\Api\Admin\TransactionController as AdminTransactionController;
 
 use App\Http\Controllers\Api\Customer\BookingController as CustomerBookingController;
 use App\Http\Controllers\Api\Customer\ListBookingController as CustomerListBookingController;
@@ -234,6 +234,18 @@ Route::prefix('admin')->middleware(['auth:sanctum', 'verified.api', 'token.expir
     // Subscription plan management
     Route::get('/subscription-plans', [AdminSubscriptionPlanController::class, 'index']);
     Route::put('/subscription-plans/{plan}', [AdminSubscriptionPlanController::class, 'update']);
+
+    // Transaction management
+    Route::get('/transactions/stats', [AdminTransactionController::class, 'stats']);
+    Route::get('/transactions', [AdminTransactionController::class, 'index']);
+    Route::post('/transactions/sync-pending', [AdminTransactionController::class, 'syncPending']); // ← tambahkan ini
+    Route::post('/transactions/{subscription}/refund', [AdminTransactionController::class, 'processRefund']);
+
+    // Refund requests
+    Route::get('/refund-requests', [AdminTransactionController::class, 'getRefundRequests']);
+    Route::patch('/refund-requests/{refundRequest}/approve', [AdminTransactionController::class, 'approveRefund']);
+    Route::patch('/refund-requests/{refundRequest}/reject', [AdminTransactionController::class, 'rejectRefund']);
+
 
 });
 
