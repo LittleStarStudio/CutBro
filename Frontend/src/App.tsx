@@ -93,7 +93,7 @@ function AnimatedRoutes() {
         <Route path="/admin/login-logs" element={<ProtectedRoute allow={["admin"]}><LoginLogs /></ProtectedRoute>} />
         <Route path="/admin/users-activity" element={<ProtectedRoute allow={["admin"]}><UsersActivity /></ProtectedRoute>} />
         <Route path="/admin/reports/users" element={<ProtectedRoute allow={["admin"]}><ReportUsers /></ProtectedRoute>} />
-        <Route path="/admin/reports/revenue" element={<ProtectedRoute allow={["admin"]}><ReportRevenue /></ProtectedRoute>} />
+        <Route path="/admin/reports/salary" element={<ProtectedRoute allow={["admin"]}><ReportRevenue /></ProtectedRoute>} />
         <Route path="/admin/notifications" element={<ProtectedRoute allow={["admin"]}><NotificationRouter /></ProtectedRoute>} />
 
         {/* ===== OWNER ===== */}

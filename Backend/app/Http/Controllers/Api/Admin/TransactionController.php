@@ -36,6 +36,8 @@ class TransactionController extends BaseController
 
         return $this->success([
             'total_transactions' => $totalSubs,
+            'subscription_count' => $totalSubs,
+            'booking_count'      => 0,
             'success_rate'       => $totalSubs > 0 ? round($successSubs / $totalSubs * 100, 1) : 0,
             'total_revenue'      => (float) $totalRevenue,
             'available_balance'  => (float) ($totalRevenue - $refunded),
@@ -82,7 +84,8 @@ class TransactionController extends BaseController
             $query->whereDate('created_at', '<=', $dateTo);
         }
 
-        $paginated = $query->paginate(15);
+        $perPage   = min((int) $request->input('per_page', 15), 500);
+        $paginated = $query->paginate($perPage);
 
         // Pre-fetch semua owner sekaligus
         $barbershopIds = $paginated->getCollection()->pluck('barbershop_id')->unique()->values();

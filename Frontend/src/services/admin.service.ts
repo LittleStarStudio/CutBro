@@ -107,6 +107,8 @@ export interface SubscriptionPlan {
 
 export interface TransactionStats {
   total_transactions: number;
+  subscription_count: number;   
+  booking_count:      number;   
   success_rate:       number;
   total_revenue:      number;
   available_balance:  number;
@@ -255,7 +257,13 @@ export const getTransactionStats = (): Promise<TransactionStats> =>
 
 export const getAdminTransactions = (
   page = 1,
-  filters?: { search?: string; status?: string; date_from?: string; date_to?: string }
+  filters?: {
+    search?: string;
+    status?: string;
+    date_from?: string;
+    date_to?: string;
+    per_page?: number;
+  }
 ): Promise<PaginatedTransactions> =>
   api
     .get<{ success: boolean; data: PaginatedTransactions }>("/admin/transactions", {

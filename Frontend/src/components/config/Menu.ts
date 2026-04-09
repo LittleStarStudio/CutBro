@@ -64,7 +64,7 @@ export const superAdminMenu: MenuItem[] = [
       {
         icon: DollarSign,
         label: "Salary",
-        href: "/admin/reports/revenue",
+        href: "/admin/reports/salary"
       },
     ],
   },
