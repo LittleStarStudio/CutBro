@@ -49,11 +49,6 @@ export const superAdminMenu: MenuItem[] = [
         label: "Users Activity", 
         href: "/admin/users-activity",
       },
-      {
-        icon: Users, 
-        label: "Admin Activity", 
-        href: "/admin/admin-activity",
-      },
     ],
   },
 

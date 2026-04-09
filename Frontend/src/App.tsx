@@ -50,7 +50,6 @@ import { ToastProvider } from "@/components/ui/Toast";
 import BarberReport from "./pages/owner/ReportBarber";
 import UsersActivity from "./pages/admin/UserActivity";
 import SubscribePage from "./pages/admin/Subscribe";
-import AdminActivity from "./pages/admin/AdminActivity";
 import BarberActivityPage from "./pages/barber/MyHistory";
 import BarberSchedule from "./pages/barber/MyActivity";
 import BarberSchedulePage from "./pages/barber/MySchedule";
@@ -93,7 +92,6 @@ function AnimatedRoutes() {
         <Route path="/admin/users" element={<ProtectedRoute allow={["admin"]}><Users /></ProtectedRoute>} />
         <Route path="/admin/login-logs" element={<ProtectedRoute allow={["admin"]}><LoginLogs /></ProtectedRoute>} />
         <Route path="/admin/users-activity" element={<ProtectedRoute allow={["admin"]}><UsersActivity /></ProtectedRoute>} />
-        <Route path="/admin/admin-activity" element={<ProtectedRoute allow={["admin"]}><AdminActivity /></ProtectedRoute>} />
         <Route path="/admin/reports/users" element={<ProtectedRoute allow={["admin"]}><ReportUsers /></ProtectedRoute>} />
         <Route path="/admin/reports/revenue" element={<ProtectedRoute allow={["admin"]}><ReportRevenue /></ProtectedRoute>} />
         <Route path="/admin/notifications" element={<ProtectedRoute allow={["admin"]}><NotificationRouter /></ProtectedRoute>} />
