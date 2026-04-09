@@ -4,6 +4,7 @@ use Illuminate\Support\Facades\Route;
 
 use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\ProfileController;
+use App\Http\Controllers\Api\NotificationController;
 use App\Http\Controllers\Api\BarbershopController;
 
 use App\Http\Controllers\Api\Owner\ServiceCategoryController;
@@ -133,6 +134,14 @@ Route::prefix('barbershops')->group(function () {
     Route::get('/{slug}', [BarbershopController::class, 'show']);
 });
 
+// Notifications (all authenticated roles)
+Route::prefix('notifications')->middleware(['auth:sanctum', 'verified.api', 'token.expired'])->group(function () {
+    Route::get('/', [NotificationController::class, 'index']);
+    Route::get('/unread-count', [NotificationController::class, 'unreadCount']);
+    Route::patch('/read-all', [NotificationController::class, 'markAllRead']);
+    Route::patch('/{notification}/read', [NotificationController::class, 'markRead']);
+});
+
 // Owner
 Route::prefix('owner')->group(function () {
     
@@ -208,6 +217,7 @@ Route::prefix('owner')->group(function () {
         Route::get('/subscription', [OwnerSubscriptionController::class, 'index']);
         Route::post('/subscription/checkout', [OwnerSubscriptionController::class, 'checkout']);
         Route::post('/subscription/activate', [OwnerSubscriptionController::class, 'activate']);
+        Route::post('/subscription/refund-request', [OwnerSubscriptionController::class, 'requestRefund']);
 
     });
 });
@@ -240,6 +250,7 @@ Route::prefix('admin')->middleware(['auth:sanctum', 'verified.api', 'token.expir
     Route::get('/transactions', [AdminTransactionController::class, 'index']);
     Route::post('/transactions/sync-pending', [AdminTransactionController::class, 'syncPending']); // ← tambahkan ini
     Route::post('/transactions/{subscription}/refund', [AdminTransactionController::class, 'processRefund']);
+    Route::post('/transactions/{subscription}/reject-refund', [AdminTransactionController::class, 'rejectDirectRefund']);
 
     // Refund requests
     Route::get('/refund-requests', [AdminTransactionController::class, 'getRefundRequests']);

@@ -13,6 +13,8 @@ export interface RegisterOwnerPayload {
   password: string;
   barbershop_name: string;
   phone: string;
+  address: string;
+  city: string;
 }
 
 export interface RegisterCustomerPayload {

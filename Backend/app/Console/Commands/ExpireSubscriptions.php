@@ -3,6 +3,9 @@
 namespace App\Console\Commands;
 
 use App\Models\OwnerSubscription;
+use App\Models\Notification;           // ← tambah
+use App\Models\User;
+
 use Carbon\Carbon;
 use Illuminate\Console\Command;
 
@@ -15,7 +18,7 @@ class ExpireSubscriptions extends Command
     {
         $now = Carbon::now();
 
-        $expired = OwnerSubscription::with('barbershop')
+        $expired = OwnerSubscription::with(['barbershop', 'plan'])
             ->where('status', 'active')
             ->whereNotNull('expired_at')
             ->where('expired_at', '<=', $now)
@@ -28,6 +31,24 @@ class ExpireSubscriptions extends Command
 
             if ($sub->barbershop) {
                 $sub->barbershop->update(['subscription_plan' => 'free']);
+
+                $owner = User::where('barbershop_id', $sub->barbershop_id)
+                    ->whereHas('role', fn($q) => $q->where('name', 'owner'))
+                    ->first();
+
+                if ($owner) {
+                    Notification::create([
+                        'user_id' => $owner->id,
+                        'type'    => 'subscription_expired',
+                        'title'   => 'Subscription Expired',
+                        'body'    => "Your {$sub->plan->display_name} subscription has expired. Renew now to restore your barbershop's full features.",
+                        'data'    => [
+                            'subscription_id' => $sub->id,
+                            'plan_name'       => $sub->plan->name,
+                            'expired_at'      => $sub->expired_at->toDateString(),
+                        ],
+                    ]);
+                }
             }
 
             $count++;

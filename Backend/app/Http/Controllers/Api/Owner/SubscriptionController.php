@@ -3,10 +3,15 @@
 namespace App\Http\Controllers\Api\Owner;
 
 use App\Http\Controllers\Api\BaseController;
+
 use App\Models\OwnerSubscription;
 use App\Models\SubscriptionPlan;
+use App\Models\Notification;
+use App\Models\User;
+
 use Carbon\Carbon;
 use Illuminate\Http\Request;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\Log;
 
 class SubscriptionController extends BaseController
@@ -177,8 +182,11 @@ class SubscriptionController extends BaseController
             $subscription->barbershop->update([
                 'subscription_plan' => $subscription->plan->name,
             ]);
-        } elseif (in_array($status, ['cancel', 'deny', 'expire'])) {
+            
+        } elseif (in_array($status, ['cancel', 'deny'])) {
             $subscription->update(['status' => 'cancelled']);
+        } elseif ($status === 'expire') {
+            $subscription->update(['status' => 'expired']);
         }
 
         return response()->json(['message' => 'OK']);
@@ -202,9 +210,21 @@ class SubscriptionController extends BaseController
             return $this->error('Subscription not found or already activated.', 404);
         }
 
-        OwnerSubscription::where('barbershop_id', $barbershop->id)
+        $existingActive = OwnerSubscription::where('barbershop_id', $barbershop->id)
             ->where('status', 'active')
-            ->update(['status' => 'cancelled']);
+            ->where('id', '!=', $subscription->id)
+            ->first();
+
+        if ($existingActive) {
+            // Queued: mulai setelah yang lama expired
+            $startedAt  = $existingActive->expired_at;
+            $expiredAt  = $existingActive->expired_at->copy()->addMonth();
+        } else {
+            // Normal: mulai sekarang
+            $startedAt = now();
+            $expiredAt = now()->addMonth();
+            $barbershop->update(['subscription_plan' => $subscription->plan->name]);
+        }
 
         // Get payment channel from Midtrans
         $paymentChannel = null;
@@ -221,15 +241,91 @@ class SubscriptionController extends BaseController
 
         $subscription->update([
             'status'          => 'active',
-            'started_at'      => now(),
-            'expired_at'      => now()->addMonth(),
+            'started_at'      => $startedAt,
+            'expired_at'      => $expiredAt,
             'paid_at'         => now(),
             'payment_channel' => $paymentChannel,
         ]);
 
-        $barbershop->update(['subscription_plan' => $subscription->plan->name]);
+        $subscription->refresh();
+
+        // Kirim notifikasi ke owner
+        Notification::create([
+            'user_id' => $request->user()->id,
+            'type'    => 'subscription_active',
+            'title'   => 'Subscription Activated',
+            'body'    => "Your {$subscription->plan->name} subscription is now active and valid until {$subscription->expired_at->format('d M Y')}. You can request a refund within the first 7 days if needed.",
+            'data'    => [
+                'subscription_id'  => $subscription->id,
+                'plan_name'        => $subscription->plan->name,
+                'expired_at'       => $subscription->expired_at->toDateString(),
+                'refundable_until' => $subscription->started_at->copy()->addDays(7)->toDateString(),
+            ],
+        ]);
 
         return $this->success(['plan' => $subscription->plan->name], 'Subscription activated successfully.');
+    }
+
+    // ─── Owner Request Refund ─────────────────────────────────────────────────
+    public function requestRefund(Request $request): JsonResponse
+    {
+        $request->validate(['reason' => 'required|string|max:500']);
+
+        $barbershopId = $request->user()->barbershop_id;
+
+        $subscription = OwnerSubscription::where('barbershop_id', $barbershopId)
+            ->where('status', 'active')
+            ->whereNotNull('paid_at')
+            ->latest('paid_at')
+            ->first();
+
+        if (! $subscription) {
+            return $this->error('No active subscription found.', 404);
+        }
+
+        // Cek batas 7 hari pertama
+        if ($subscription->started_at->diffInDays(now()) > 7) {
+            return $this->error('Refund can only be requested within the first 7 days of your subscription.', 422);
+        }
+
+        // Cek tidak ada pending/approved request
+        $alreadyExists = \App\Models\RefundRequest::where('owner_subscription_id', $subscription->id)
+            ->whereIn('status', ['pending', 'approved'])
+            ->exists();
+
+        if ($alreadyExists) {
+            return $this->error('A refund request for this subscription is already pending or has been approved.', 422);
+        }
+
+        \App\Models\RefundRequest::create([
+            'transaction_type'      => 'subscription',
+            'owner_subscription_id' => $subscription->id,
+            'barbershop_id'         => $barbershopId,
+            'requested_by'          => $request->user()->id,
+            'reason'                => $request->reason,
+            'refund_amount'         => $subscription->plan->price,
+            'status'                => 'pending',
+        ]);
+
+        // Kirim notifikasi ke semua super_admin
+        $admins = \App\Models\User::whereHas('role', fn($q) => $q->where('name', 'super_admin'))->get();
+        foreach ($admins as $admin) {
+            \App\Models\Notification::create([
+                'user_id' => $admin->id,
+                'type'    => 'refund_request_received',
+                'title'   => 'New Refund Request',
+                'body'    => "Owner of {$subscription->barbershop->name} has requested a refund for their {$subscription->plan->name} subscription. Reason: {$request->reason}.",
+                'data'    => [
+                    'subscription_id' => $subscription->id,
+                    'order_id'        => $subscription->midtrans_order_id,
+                    'plan_name'       => $subscription->plan->name,
+                    'refund_amount'   => $subscription->plan->price,
+                    'barbershop_name' => $subscription->barbershop->name,
+                ],
+            ]);
+        }
+
+        return $this->success([], 'Refund request submitted successfully. Admin will review your request.');
     }
 
 }

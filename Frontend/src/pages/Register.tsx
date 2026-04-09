@@ -1,6 +1,6 @@
-import { useState } from "react";
+import { useState, useRef, useEffect } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { Mail, User, Store, AlertCircle, X, Phone } from "lucide-react";
+import { Mail, User, Store, AlertCircle, X, Phone, MapPin, Building2 } from "lucide-react";
 import axios from "axios";
 
 import Button from "@/components/ui/Button";
@@ -21,6 +21,8 @@ type FormData = {
   confirmPassword: string;
   barbershop_name: string;
   phone: string;
+  address: string;
+  city: string;
 };
 
 type Errors = Partial<FormData>;
@@ -42,6 +44,17 @@ function ErrorBanner({ message, onClose }: { message: string; onClose: () => voi
   );
 }
 
+const INDONESIAN_CITIES = [
+  "Ambon", "Balikpapan", "Banda Aceh", "Bandar Lampung", "Banjarmasin",
+  "Batam", "Bekasi", "Bogor", "Cimahi", "Cirebon",
+  "Denpasar", "Depok", "Jakarta", "Jambi", "Jayapura",
+  "Kediri", "Kupang", "Madiun", "Makassar", "Malang",
+  "Manado", "Mataram", "Medan", "Padang", "Palangkaraya",
+  "Palembang", "Pekanbaru", "Pontianak", "Samarinda", "Semarang",
+  "Serang", "Solo", "Surabaya", "Surakarta", "Tangerang",
+  "Tangerang Selatan", "Tasikmalaya", "Yogyakarta",
+];
+
 /* ================= COMPONENT ================= */
 export default function Register() {
   const navigate = useNavigate();
@@ -54,11 +67,15 @@ export default function Register() {
     confirmPassword: "",
     barbershop_name: "",
     phone: "",
+    address: "",
+    city: "",
   });
 
   const [errors, setErrors] = useState<Errors>({});
   const [bannerError, setBannerError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [cityOpen, setCityOpen] = useState(false);   
+  const cityRef = useRef<HTMLDivElement>(null);            
 
   /* ================= INPUT HANDLER ================= */
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -67,6 +84,17 @@ export default function Register() {
     setErrors((prev) => ({ ...prev, [name]: undefined }));
     setBannerError(null);
   };
+
+    /* ================= CITY DROPDOWN ================= */
+    useEffect(() => {
+      const handler = (e: MouseEvent) => {
+        if (cityRef.current && !cityRef.current.contains(e.target as Node)) {
+          setCityOpen(false);
+        }
+      };
+      document.addEventListener("mousedown", handler);
+      return () => document.removeEventListener("mousedown", handler);
+    }, []);
 
   /* ================= VALIDATION ================= */
   const validate = (): boolean => {
@@ -93,6 +121,14 @@ export default function Register() {
         newErrors.phone = "Phone number is required.";
       } else if (!/^(08|\+628)[0-9]{8,11}$/.test(form.phone.trim())) {
         newErrors.phone = "Enter a valid Indonesian phone number (e.g. 08123456789).";
+      }
+    }
+    if (selectedRole === "owner") {
+      if (!form.address.trim()) {
+        newErrors.address = "Address is required.";
+      }
+      if (!form.city.trim()) {
+        newErrors.city = "City is required.";
       }
     }
 
@@ -132,6 +168,8 @@ export default function Register() {
           password:        form.password,
           barbershop_name: form.barbershop_name.trim(),
           phone:           form.phone.trim(),
+          address:         form.address.trim(),
+          city:            form.city.trim(),
         });
       } else {
         await registerCustomer({
@@ -156,6 +194,8 @@ export default function Register() {
               if (serverErrors.password) mapped.password = serverErrors.password[0];
               if (serverErrors.barbershop_name) mapped.barbershop_name = serverErrors.barbershop_name[0];
               if (serverErrors.phone) mapped.phone = serverErrors.phone[0];
+              if (serverErrors.address) mapped.address = serverErrors.address[0];
+              if (serverErrors.city)    mapped.city    = serverErrors.city[0];
               setErrors(mapped);
               setBannerError("Please fix the errors below before continuing.");
             } else {
@@ -236,7 +276,7 @@ export default function Register() {
             />
           )}
 
-          {/* Field phone hanya untuk owner */}
+         {/* Field phone hanya untuk owner */}
           {selectedRole === "owner" && (
             <FormInput
               label="Phone Number"
@@ -251,23 +291,117 @@ export default function Register() {
             />
           )}
 
-          <PasswordInput
-            label="Password"
-            name="password"
-            value={form.password}
-            onChange={handleChange}
-            placeholder="Minimum 6 characters"
-            error={errors.password}
-          />
+          {/* Address | City — owner only, 2 kolom */}
+          {selectedRole === "owner" && (
+            <div className="grid grid-cols-2 gap-3">
+              <FormInput
+                label="Address"
+                icon={MapPin}
+                name="address"
+                type="text"
+                value={form.address}
+                onChange={handleChange}
+                placeholder="Street address"
+                error={errors.address}
+              />
 
-          <PasswordInput
-            label="Confirm Password"
-            name="confirmPassword"
-            value={form.confirmPassword}
-            onChange={handleChange}
-            placeholder="Repeat your password"
-            error={errors.confirmPassword}
-          />
+              {/* City — custom dropdown selalu buka ke bawah */}
+              <div ref={cityRef} className="relative">
+                <label className="text-sm text-neutral-300 font-medium">City</label>
+                <div className="relative mt-2">
+                  <Building2 className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-neutral-500 pointer-events-none z-10" />
+                  <button
+                    type="button"
+                    onClick={() => setCityOpen((prev) => !prev)}
+                    className={`
+                      w-full pl-10 pr-4 py-3 rounded-xl bg-neutral-950 border text-left text-sm
+                      focus:outline-none focus:border-amber-500 focus:ring-1 focus:ring-amber-500
+                      transition-colors
+                      ${errors.city ? "border-red-500" : "border-neutral-800"}
+                      ${form.city ? "text-white" : "text-neutral-600"}
+                    `}
+                  >
+                    {form.city || "Select city"}
+                  </button>
+
+                  {cityOpen && (
+                    <div className="absolute z-50 top-full left-0 right-0 mt-1 bg-neutral-900 border border-neutral-700 rounded-xl overflow-hidden shadow-xl">
+                      <div className="max-h-44 overflow-y-auto">
+                        {INDONESIAN_CITIES.map((city) => (
+                          <button
+                            key={city}
+                            type="button"
+                            onClick={() => {
+                              setForm((prev) => ({ ...prev, city }));
+                              setErrors((prev) => ({ ...prev, city: undefined }));
+                              setBannerError(null);
+                              setCityOpen(false);
+                            }}
+                            className={`
+                              w-full text-left px-4 py-2 text-sm transition-colors
+                              ${form.city === city
+                                ? "bg-amber-500/20 text-amber-400"
+                                : "text-neutral-300 hover:bg-neutral-800"}
+                            `}
+                          >
+                            {city}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {errors.city && (
+                  <p className="text-red-400 text-sm mt-2 flex items-center gap-1">
+                    <AlertCircle className="w-4 h-4" />
+                    {errors.city}
+                  </p>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* Password | Confirm Password — 2 kolom untuk owner, stacked untuk customer */}
+          {selectedRole === "owner" ? (
+            <div className="grid grid-cols-2 gap-3">
+              <PasswordInput
+                label="Password"
+                name="password"
+                value={form.password}
+                onChange={handleChange}
+                placeholder="Min. 6 characters"
+                error={errors.password}
+              />
+              <PasswordInput
+                label="Confirm Password"
+                name="confirmPassword"
+                value={form.confirmPassword}
+                onChange={handleChange}
+                placeholder="Repeat password"
+                error={errors.confirmPassword}
+              />
+            </div>
+          ) : (
+            <>
+              <PasswordInput
+                label="Password"
+                name="password"
+                value={form.password}
+                onChange={handleChange}
+                placeholder="Minimum 6 characters"
+                error={errors.password}
+              />
+              <PasswordInput
+                label="Confirm Password"
+                name="confirmPassword"
+                value={form.confirmPassword}
+                onChange={handleChange}
+                placeholder="Repeat your password"
+                error={errors.confirmPassword}
+              />
+            </>
+          )}
 
           <Button
             type="submit"

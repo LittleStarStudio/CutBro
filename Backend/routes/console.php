@@ -9,3 +9,5 @@ Artisan::command('inspire', function () {
 })->purpose('Display an inspiring quote');
 
 Schedule::command('app:expire-unpaid-bookings')->everyMinute();
+Schedule::command('subscriptions:expire')->dailyAt('00:00');
+Schedule::command('subscriptions:notify-expiry')->dailyAt('08:00');

@@ -51,8 +51,6 @@ export default function Barbershops() {
 
   const [barbershops, setBarbershops] = useState<Barbershop[]>([]);
   const [stats, setStats] = useState({ total: 0, free: 0, pro: 0, premium: 0 });
-  const [page, setPage] = useState(1);
-  const [lastPage, setLastPage] = useState(1);
 
   const [searchQuery, setSearchQuery] = useState("");
   const [filterPlan, setFilterPlan] = useState<string>("all");
@@ -72,9 +70,9 @@ export default function Barbershops() {
     } catch { /* silent */ }
   };
 
-  const loadBarbershops = async (p: number) => {
+  const loadBarbershops = async () => {
     try {
-      const result = await adminService.getAdminBarbershops(p);
+      const result = await adminService.getAdminBarbershops();
       setBarbershops(
         result.data.map((s) => ({
           id:       s.id,
@@ -88,12 +86,11 @@ export default function Barbershops() {
           rate:     s.rate,
         }))
       );
-      setLastPage(result.last_page);
     } catch { /* silent */ }
   };
 
   useEffect(() => { loadStats(); }, []);
-  useEffect(() => { loadBarbershops(page); }, [page]);
+  useEffect(() => { loadBarbershops(); }, []);
 
   /* ================= FILTER ================= */
 
@@ -171,7 +168,7 @@ export default function Barbershops() {
       setShowEditModal(false);
       setSelectedShop(null);
       toast.success("Barbershop Updated", `${selectedShop.name} updated successfully.`);
-      await Promise.all([loadStats(), loadBarbershops(page)]);
+      await Promise.all([loadStats(), loadBarbershops()]);
     } catch {
       toast.error("Update Failed", "Something went wrong. Please try again.");
     } finally {
@@ -198,9 +195,7 @@ export default function Barbershops() {
       setShowDeleteModal(false);
       setSelectedShop(null);
       toast.success("Barbershop Deleted", `${name} has been removed.`);
-      const newPage = barbershops.length === 1 && page > 1 ? page - 1 : page;
-      setPage(newPage);
-      if (newPage === page) await Promise.all([loadStats(), loadBarbershops(page)]);
+      await Promise.all([loadStats(), loadBarbershops()]);
     } catch {
       toast.error("Delete Failed", "Something went wrong. Please try again.");
     }
@@ -439,28 +434,6 @@ export default function Barbershops() {
           </div>
         </TableCard>
 
-        {/* ================= PAGINATION ================= */}
-        {lastPage > 1 && (
-          <div className="flex items-center justify-center gap-3">
-            <button
-              onClick={() => setPage((p) => Math.max(1, p - 1))}
-              disabled={page === 1}
-              className="px-3 py-1.5 text-sm rounded-md bg-card border border-border disabled:opacity-40 hover:bg-muted transition-colors"
-            >
-              Previous
-            </button>
-            <span className="text-sm text-muted-foreground">
-              Page {page} of {lastPage}
-            </span>
-            <button
-              onClick={() => setPage((p) => Math.min(lastPage, p + 1))}
-              disabled={page === lastPage}
-              className="px-3 py-1.5 text-sm rounded-md bg-card border border-border disabled:opacity-40 hover:bg-muted transition-colors"
-            >
-              Next
-            </button>
-          </div>
-        )}
       </div>
 
       {/* ================= MODALS ================= */}

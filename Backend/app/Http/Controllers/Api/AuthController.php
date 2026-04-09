@@ -491,6 +491,8 @@ class AuthController extends BaseController
             'password'         => 'required|min:6',
             'barbershop_name'  => 'required|string|max:150',
             'phone'            => 'required|string|max:20|unique:barbershops,phone',
+            'address'          => 'required|string|max:255',
+            'city'             => 'required|string|max:100',
         ]);
 
         // Check if owner role exists
@@ -503,8 +505,8 @@ class AuthController extends BaseController
         $barbershop = Barbershop::create([
             'name'    => $request->barbershop_name,
             'slug'    => Str::slug($request->barbershop_name) . '-' . Str::random(5),
-            'address' => null,
-            'city'    => null,
+            'address' => $request->address,
+            'city'    => $request->city,
             'phone'   => $request->phone,
             'status'  => 'active'
         ]);

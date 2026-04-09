@@ -30,13 +30,11 @@ class BarbershopController extends BaseController
      */
     public function index(Request $request)
     {
-        $perPage = 10;
-
-        $paginated = Barbershop::with(['barbers'])
+        $all = Barbershop::with(['barbers'])
             ->orderBy('created_at', 'desc')
-            ->paginate($perPage);
+            ->get();
 
-        $data = $paginated->getCollection()->map(function ($shop) {
+        $data = $all->map(function ($shop) {
             // Find the owner user for this barbershop
             $owner = User::where('barbershop_id', $shop->id)
                 ->whereHas('role', fn ($q) => $q->where('name', 'owner'))
@@ -62,11 +60,8 @@ class BarbershopController extends BaseController
         });
 
         return $this->success([
-            'data'         => $data,
-            'current_page' => $paginated->currentPage(),
-            'last_page'    => $paginated->lastPage(),
-            'per_page'     => $paginated->perPage(),
-            'total'        => $paginated->total(),
+            'data'  => $data,
+            'total' => $all->count(),
         ]);
     }
 

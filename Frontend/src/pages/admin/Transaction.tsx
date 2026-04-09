@@ -22,16 +22,13 @@ import MobileCard from "@/components/admin/MobileCard";
 import Modal from "@/components/admin/Modal";
 import { useToast } from "@/components/ui/Toast";
 
-import {
+import { 
   getTransactionStats,
   getAdminTransactions,
-  getAdminRefundRequests,
   processSubscriptionRefund,
-  approveRefundRequest,
-  rejectRefundRequest,
+  rejectDirectRefund,
   type TransactionStats,
   type AdminTransaction,
-  type AdminRefundRequest,
   syncPendingTransactions,
 } from "@/services/admin.service";
 
@@ -39,27 +36,25 @@ import {
    TYPES & CONSTANTS
 ========================================================= */
 
-type TxStatus = "success" | "pending" | "cancelled" | "expired";
-
 const STATUS_CONFIG: Record<string, { bg: string; dot: string; label: string }> = {
-  success:   { bg: "bg-green-500/10 text-green-400",   dot: "bg-green-500",  label: "Success"  },
-  pending:   { bg: "bg-yellow-500/10 text-yellow-400", dot: "bg-yellow-500", label: "Pending"  },
-  cancelled: { bg: "bg-red-500/10 text-red-400",    dot: "bg-red-500",   label: "Cancelled" },
-  expired:   { bg: "bg-gray-500/10 text-gray-400",     dot: "bg-gray-500",   label: "Expired"  },
-};
-
-const REFUND_STATUS_CONFIG: Record<string, { bg: string; label: string }> = {
-  pending:  { bg: "bg-yellow-500/10 text-yellow-400", label: "Refund Pending"  },
-  approved: { bg: "bg-green-500/10 text-green-400",   label: "Refunded"        },
-  rejected: { bg: "bg-red-500/10 text-red-400",       label: "Refund Rejected" },
+  success:         { bg: "bg-blue-500/10 text-blue-400",     dot: "bg-blue-500",   label: "Success"         },
+  pending:         { bg: "bg-yellow-500/10 text-yellow-400", dot: "bg-yellow-500", label: "Pending"         },
+  cancelled:       { bg: "bg-red-500/10 text-red-400",       dot: "bg-red-500",    label: "Cancelled"       },
+  expired:         { bg: "bg-gray-500/10 text-gray-400",     dot: "bg-gray-500",   label: "Expired"         },
+  refunded:        { bg: "bg-green-500/10 text-green-400",   dot: "bg-green-500",  label: "Refunded"        },
+  refund_rejected: { bg: "bg-purple-500/10 text-purple-400", dot: "bg-purple-500", label: "Refund Rejected" },
+  refund_pending:  { bg: "bg-yellow-500/10 text-yellow-400", dot: "bg-yellow-500", label: "Refund Pending"  },
 };
 
 const STATUS_OPTIONS = [
-  { value: "all",       label: "All Status" },
-  { value: "success",   label: "Success"    },
-  { value: "pending",   label: "Pending"    },
-  { value: "cancelled", label: "Cancelled"  },
-  { value: "expired",   label: "Expired"    },  
+  { value: "all",             label: "All Status"     },
+  { value: "success",         label: "Success"        },
+  { value: "pending",         label: "Pending"        },
+  { value: "cancelled",       label: "Cancelled"      },
+  { value: "expired",         label: "Expired"        },
+  { value: "refunded",        label: "Refunded"       },
+  { value: "refund_rejected", label: "Refund Rejected" },
+  { value: "refund_pending",  label: "Refund Pending"  },
 ];
 
 const TYPE_OPTIONS = [
@@ -79,7 +74,6 @@ export default function TransactionPage() {
   // ── Data states ──
   const [statsData,    setStatsData]    = useState<TransactionStats | null>(null);
   const [transactions, setTransactions] = useState<AdminTransaction[]>([]);
-  const [refundReqs,   setRefundReqs]   = useState<AdminRefundRequest[]>([]);
   const [loadingStats, setLoadingStats] = useState(true);
   const [loadingTable, setLoadingTable] = useState(true);
   const [currentPage,  setCurrentPage]  = useState(1);
@@ -96,6 +90,7 @@ export default function TransactionPage() {
   const [refundModal,       setRefundModal]       = useState<AdminTransaction | null>(null);
   const [refundReason,      setRefundReason]      = useState("");
   const [refundLoading,     setRefundLoading]     = useState(false);
+  const [rejectLoading,     setRejectLoading]     = useState(false);
   const [showWithdrawModal, setShowWithdrawModal] = useState(false);
   const [withdrawSuccess,   setWithdrawSuccess]   = useState(false);
   const [withdrawInput,     setWithdrawInput]     = useState("");
@@ -139,19 +134,8 @@ export default function TransactionPage() {
     }
   }, [searchQuery, filterStatus]);
 
-  /* ── Fetch pending refund requests ── */
-  const fetchRefundRequests = useCallback(async () => {
-    try {
-      const res = await getAdminRefundRequests("pending");
-      setRefundReqs(res.data);
-    } catch {
-      // silent — section hides if empty
-    }
-  }, []);
-
   useEffect(() => {
     fetchStats();
-    fetchRefundRequests();
   }, []);
 
   useEffect(() => {
@@ -199,31 +183,21 @@ export default function TransactionPage() {
     }
   };
 
-  const handleRejectRefund = () => {
-    toast.info("Cancelled", "Refund action was cancelled.");
-    setRefundModal(null);
-    setRefundReason("");
-  };
-
-  const handleApproveRequest = async (req: AdminRefundRequest, adminNote: string) => {
+  const handleRejectRefund = async () => {
+    if (!refundModal || !refundReason.trim()) return;
     try {
-      await approveRefundRequest(req.id, adminNote);
-      toast.success("Approved", `Refund request ${req.order_id} approved.`);
-      fetchRefundRequests();
-      fetchStats();
+      setRejectLoading(true);
+      await rejectDirectRefund(refundModal.id, refundReason.trim());
+      toast.success("Rejected", `Refund request for order ${refundModal.order_id} has been rejected.`);
+      setRefundModal(null);
+      setRefundReason("");
       fetchTransactions(currentPage);
-    } catch {
-      toast.error("Error", "Failed to approve refund request.");
-    }
-  };
-
-  const handleRejectRequest = async (req: AdminRefundRequest, adminNote: string) => {
-    try {
-      await rejectRefundRequest(req.id, adminNote);
-      toast.success("Rejected", `Refund request ${req.order_id} rejected.`);
-      fetchRefundRequests();
-    } catch {
-      toast.error("Error", "Failed to reject refund request.");
+      fetchStats();
+    } catch (err: any) {
+      const msg = err?.response?.data?.message ?? "Failed to reject refund. Please try again.";
+      toast.error("Reject Failed", msg);
+    } finally {
+      setRejectLoading(false);
     }
   };
 
@@ -245,7 +219,6 @@ export default function TransactionPage() {
   const availableBalance = statsData?.available_balance ?? 0;
   const withdrawAmount   = Number(withdrawInput.replace(/\D/g, ""));
   const isWithdrawValid  = withdrawAmount >= 1_000_000 && withdrawAmount <= availableBalance;
-  const canWithdraw      = availableBalance >= 1_000_000;
 
   const handleWithdraw = () => {
     setWithdrawSuccess(true);
@@ -333,16 +306,7 @@ export default function TransactionPage() {
       key: "status",
       header: "Status",
       render: (item: AdminTransaction) => {
-        if (item.refund_request) {
-          const rc = REFUND_STATUS_CONFIG[item.refund_request.status];
-          return (
-            <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium ${rc.bg}`}>
-              <span className="w-1.5 h-1.5 rounded-full bg-current opacity-60" />
-              {rc.label}
-            </span>
-          );
-        }
-        const s = STATUS_CONFIG[item.status as TxStatus] ?? STATUS_CONFIG.pending;
+        const s = STATUS_CONFIG[item.status] ?? STATUS_CONFIG.pending;
         return (
           <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium ${s.bg}`}>
             <span className={`w-1.5 h-1.5 rounded-full ${s.dot}`} />
@@ -355,21 +319,7 @@ export default function TransactionPage() {
       key: "action",
       header: "Action",
       render: (item: AdminTransaction) => {
-        if (item.refund_request?.status === "pending") {
-          return (
-            <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-yellow-500/10 text-yellow-400 border border-yellow-500/20">
-              <RotateCcw size={12} /> Pending
-            </span>
-          );
-        }
-        if (item.refund_request?.status === "approved") {
-          return (
-            <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-green-500/10 text-green-400 border border-green-500/20">
-              <CheckCircle size={12} /> Refunded
-            </span>
-          );
-        }
-        const canRefund = item.subscription_status === "active" && !item.refund_request;
+        const canRefund = item.status === "success" || item.status === "refund_pending";
         return (
           <button
             onClick={() => canRefund && handleRefundClick(item)}
@@ -408,22 +358,22 @@ export default function TransactionPage() {
           <div className="flex gap-3">
             <button
               onClick={handleRejectRefund}
-              disabled={!isReasonFilled || refundLoading}
+              disabled={rejectLoading || refundLoading || !refundReason.trim()}
               className={[
                 "flex-1 py-2.5 rounded-xl text-sm font-bold transition-all",
-                isReasonFilled && !refundLoading
+                refundReason.trim() && !rejectLoading && !refundLoading
                   ? "bg-red-500/10 text-red-400 border border-red-500/30 hover:bg-red-500 hover:text-white"
                   : "bg-[#1A1A1A] text-[#444] border border-[#2A2A2A] cursor-not-allowed opacity-40",
               ].join(" ")}
             >
-              Reject
+              {rejectLoading ? "Rejecting..." : "Reject"}
             </button>
             <button
               onClick={handleApproveRefund}
-              disabled={!isReasonFilled || refundLoading}
+              disabled={!isReasonFilled || refundLoading || rejectLoading}
               className={[
                 "flex-1 py-2.5 rounded-xl text-sm font-bold transition-all",
-                isReasonFilled && !refundLoading
+                isReasonFilled && !refundLoading && !rejectLoading
                   ? "bg-green-500 hover:bg-green-400 text-white"
                   : "bg-[#1A1A1A] text-[#444] border border-[#2A2A2A] cursor-not-allowed opacity-40",
               ].join(" ")}
@@ -454,6 +404,14 @@ export default function TransactionPage() {
                 </div>
               ))}
             </div>
+
+            {/* Owner reason (hanya untuk refund_pending) */}
+            {refundModal.status === "refund_pending" && refundModal.refund_request?.reason && (
+              <div className="rounded-xl border border-amber-500/20 bg-amber-500/5 p-3">
+                <p className="text-amber-400 text-xs font-semibold mb-1">Owner Refund Reason</p>
+                <p className="text-[#B8B8B8] text-sm leading-relaxed">{refundModal.refund_request.reason}</p>
+              </div>
+            )}
 
             {/* Reason input */}
             <div>
@@ -573,7 +531,6 @@ export default function TransactionPage() {
         logo={superAdminLogo}
         userProfile={currentUser ?? { name: "Super Admin", email: "admin@cutbro.com", role: "admin" }}
         showNotification
-        notificationCount={refundReqs.length}
         onLogout={logout}
       >
         <div className="w-full space-y-6 lg:space-y-8">
@@ -634,15 +591,10 @@ export default function TransactionPage() {
                 </div>
               </div>
               <button
-                onClick={() => { if (canWithdraw) { setWithdrawInput(""); setShowWithdrawModal(true); } }}
-                disabled={!canWithdraw}
-                className={`w-full py-2 rounded-lg text-xs font-semibold transition-all duration-200 ${
-                  canWithdraw
-                    ? "bg-[#D4AF37] hover:bg-[#c49f30] text-black cursor-pointer shadow-lg shadow-[#D4AF37]/20 active:scale-95"
-                    : "bg-white/10 text-[#B8B8B8] cursor-not-allowed opacity-40"
-                }`}
+                disabled
+                className="w-full py-2 rounded-lg text-xs font-semibold bg-white/10 text-[#B8B8B8] cursor-not-allowed opacity-40"
               >
-                {canWithdraw ? "Withdraw Funds" : "Withdraw Funds (min. Rp 1.000.000)"}
+                Withdraw (Coming Soon)
               </button>
             </div>
 
@@ -683,8 +635,8 @@ export default function TransactionPage() {
               <MobileCardList
                 data={filtered}
                 renderCard={(item: AdminTransaction) => {
-                  const s = STATUS_CONFIG[item.status as TxStatus] ?? STATUS_CONFIG.pending;
-                  const canRefund = item.subscription_status === "active" && !item.refund_request;
+                  const s = STATUS_CONFIG[item.status] ?? STATUS_CONFIG.pending;
+                  const canRefund = item.status === "success" || item.status === "refund_pending";
                   return (
                     <MobileCard
                       title={item.buyer_name}
@@ -732,168 +684,11 @@ export default function TransactionPage() {
               />
             </div>
 
-            {/* Pagination */}
-            {lastPage > 1 && (
-              <div className="flex items-center justify-center gap-2 pt-4 border-t border-white/5">
-                <button
-                  onClick={() => fetchTransactions(currentPage - 1)}
-                  disabled={currentPage === 1}
-                  className="px-3 py-1.5 rounded-lg text-xs text-[#B8B8B8] border border-white/10 hover:bg-white/5 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
-                >
-                  Previous
-                </button>
-                <span className="text-[#B8B8B8] text-xs">
-                  Page {currentPage} of {lastPage} ({total} total)
-                </span>
-                <button
-                  onClick={() => fetchTransactions(currentPage + 1)}
-                  disabled={currentPage === lastPage}
-                  className="px-3 py-1.5 rounded-lg text-xs text-[#B8B8B8] border border-white/10 hover:bg-white/5 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
-                >
-                  Next
-                </button>
-              </div>
-            )}
           </TableCard>
-
-          {/* ── PENDING REFUND REQUESTS ── */}
-          {refundReqs.length > 0 && (
-            <div className="rounded-xl border border-yellow-500/20 bg-yellow-500/5">
-              <div className="px-5 py-4 border-b border-yellow-500/10 flex items-center justify-between">
-                <div>
-                  <h3 className="text-white font-semibold text-sm">Pending Refund Requests</h3>
-                  <p className="text-[#B8B8B8] text-xs mt-0.5">
-                    Owner-submitted refund requests awaiting admin review
-                  </p>
-                </div>
-                <span className="px-2.5 py-1 rounded-full bg-yellow-500/20 text-yellow-400 text-xs font-bold">
-                  {refundReqs.length}
-                </span>
-              </div>
-              <div className="divide-y divide-white/5">
-                {refundReqs.map((req) => (
-                  <RefundRequestRow
-                    key={req.id}
-                    req={req}
-                    formatCurrency={formatCurrency}
-                    onApprove={handleApproveRequest}
-                    onReject={handleRejectRequest}
-                  />
-                ))}
-              </div>
-            </div>
-          )}
 
         </div>
       </DashboardLayout>
     </>
-  );
-}
-
-/* =========================================================
-   SUB-COMPONENT: Refund Request Row
-========================================================= */
-
-function RefundRequestRow({
-  req,
-  formatCurrency,
-  onApprove,
-  onReject,
-}: {
-  req:            AdminRefundRequest;
-  formatCurrency: (n: number) => string;
-  onApprove:      (req: AdminRefundRequest, note: string) => Promise<void>;
-  onReject:       (req: AdminRefundRequest, note: string) => Promise<void>;
-}) {
-  const [showAction, setShowAction] = useState(false);
-  const [adminNote,  setAdminNote]  = useState("");
-  const [loading,    setLoading]    = useState(false);
-
-  const noteOk = adminNote.trim().length > 0;
-
-  const handleApprove = async () => {
-    if (!noteOk) return;
-    setLoading(true);
-    await onApprove(req, adminNote.trim());
-    setLoading(false);
-  };
-
-  const handleReject = async () => {
-    if (!noteOk) return;
-    setLoading(true);
-    await onReject(req, adminNote.trim());
-    setLoading(false);
-  };
-
-  return (
-    <div className="px-5 py-4">
-      <div className="flex items-start justify-between gap-4">
-        <div className="space-y-1 flex-1 min-w-0">
-          <div className="flex items-center gap-2 flex-wrap">
-            <span className="text-white text-sm font-medium">{req.barbershop_name}</span>
-            <span className="text-[#B8B8B8] text-xs font-mono">{req.order_id}</span>
-          </div>
-          <p className="text-[#B8B8B8] text-xs">{req.requester_email}</p>
-          <p className="text-[#B8B8B8] text-xs mt-1">
-            <span className="text-zinc-500">Reason: </span>{req.reason}
-          </p>
-          <div className="flex items-center gap-3 mt-1">
-            <span className="text-[#D4AF37] font-bold text-sm">{formatCurrency(req.refund_amount)}</span>
-            <span className="text-[#666] text-xs">{req.created_at}</span>
-          </div>
-        </div>
-        <button
-          onClick={() => setShowAction((v) => !v)}
-          className="flex-shrink-0 px-3 py-1.5 rounded-lg text-xs font-semibold bg-white/5 text-[#B8B8B8] border border-white/10 hover:bg-white/10 transition-colors"
-        >
-          {showAction ? "Close" : "Review"}
-        </button>
-      </div>
-
-      {showAction && (
-        <div className="mt-4 space-y-3 border-t border-white/5 pt-4">
-          <div>
-            <label className="text-[#B8B8B8] text-xs font-medium mb-1.5 block">
-              Admin Note <span className="text-red-400">*</span>
-            </label>
-            <textarea
-              rows={2}
-              value={adminNote}
-              onChange={(e) => setAdminNote(e.target.value)}
-              placeholder="Enter admin note..."
-              className="w-full px-3 py-2 rounded-xl bg-white/5 border border-white/10 text-white text-sm outline-none focus:border-[#D4AF37]/60 transition-colors resize-none"
-            />
-            {!noteOk && <p className="text-amber-400 text-xs mt-1">* Required</p>}
-          </div>
-          <div className="flex gap-3">
-            <button
-              onClick={handleReject}
-              disabled={!noteOk || loading}
-              className={[
-                "flex-1 py-2 rounded-lg text-xs font-bold transition-all",
-                noteOk && !loading
-                  ? "bg-red-500/10 text-red-400 border border-red-500/30 hover:bg-red-500 hover:text-white"
-                  : "bg-[#1A1A1A] text-[#444] border border-[#2A2A2A] cursor-not-allowed opacity-40",
-              ].join(" ")}
-            >
-              Reject
-            </button>
-            <button
-              onClick={handleApprove}
-              disabled={!noteOk || loading}
-              className={[
-                "flex-1 py-2 rounded-lg text-xs font-bold transition-all",
-                noteOk && !loading
-                  ? "bg-green-500 hover:bg-green-400 text-white"
-                  : "bg-[#1A1A1A] text-[#444] border border-[#2A2A2A] cursor-not-allowed opacity-40",
-              ].join(" ")}
-            >
-              {loading ? "Processing..." : "Approve & Refund"}
-            </button>
-          </div>
-        </div>
-      )}
-    </div>
   );
 }
 

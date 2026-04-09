@@ -24,11 +24,8 @@ export interface AdminBarbershop {
   rate: number;
 }
 
-export interface PaginatedBarbershops {
+export interface BarbershopsResponse {
   data: AdminBarbershop[];
-  current_page: number;
-  last_page: number;
-  per_page: number;
   total: number;
 }
 
@@ -130,7 +127,7 @@ export interface AdminTransaction {
   buyer_email: string;
   payment_channel: string;
   amount: number;
-  status: 'success' | 'pending' | 'cancelled' | 'expired';
+  status: 'success' | 'pending' | 'cancelled' | 'expired' | 'refunded' | 'refund_rejected' | 'refund_pending';
   subscription_status: string;   // untuk logic refund
   paid_at: string | null;
   created_at: string;
@@ -183,12 +180,10 @@ export const getBarbershopStats = () =>
     .get<{ success: boolean; data: BarbershopStats }>("/admin/barbershops/stats")
     .then(unwrap<BarbershopStats>);
 
-export const getAdminBarbershops = (page = 1) =>
+export const getAdminBarbershops = () =>
   api
-    .get<{ success: boolean; data: PaginatedBarbershops }>("/admin/barbershops", {
-      params: { page },
-    })
-    .then(unwrap<PaginatedBarbershops>);
+    .get<{ success: boolean; data: BarbershopsResponse }>("/admin/barbershops")
+    .then(unwrap<BarbershopsResponse>);
 
 export const updateAdminBarbershop = (id: number, data: UpdateBarbershopPayload) =>
   api.put(`/admin/barbershops/${id}`, data);
@@ -274,6 +269,14 @@ export const processSubscriptionRefund = (
 ): Promise<void> =>
   api
     .post<{ success: boolean }>(`/admin/transactions/${subscriptionId}/refund`, { reason })
+    .then(() => undefined);
+
+export const rejectDirectRefund = (
+  subscriptionId: number,
+  reason: string
+): Promise<void> =>
+  api
+    .post<{ success: boolean }>(`/admin/transactions/${subscriptionId}/reject-refund`, { reason })
     .then(() => undefined);
 
 export const getAdminRefundRequests = (status?: string): Promise<PaginatedRefundRequests> =>

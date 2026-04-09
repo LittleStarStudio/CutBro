@@ -412,3 +412,12 @@ export const activatePlan = (orderId: string): Promise<{ plan: string }> =>
       { order_id: orderId }
     )
     .then(unwrap);
+
+
+/* ================================================================
+   Notification Owner
+================================================================ */
+
+export const requestSubscriptionRefund = (reason: string) =>
+  api.post("/owner/subscription/refund-request", { reason });
+
