@@ -1,22 +1,29 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
-import { Mail, Sparkles } from "lucide-react";
+import { Mail, Scissors } from "lucide-react";
 import Button from "@/components/ui/Button";
+import { forgotPassword } from "@/services/auth.service";
 
 export default function ForgotPassword() {
-  const [email, setEmail] = useState("");
-  const [isSent, setIsSent] = useState(false);
+  const [email,   setEmail]   = useState("");
+  const [isSent,  setIsSent]  = useState(false);
   const [loading, setLoading] = useState(false);
+  const [error,   setError]   = useState("");
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
-
-    // dummy request
-    await new Promise((r) => setTimeout(r, 1000));
-
-    setIsSent(true);
-    setLoading(false);
+    setError("");
+    try {
+      await forgotPassword(email);
+      setIsSent(true);
+    } catch (err: any) {
+      const msg = err?.response?.data?.message
+        ?? "Something went wrong. Please try again.";
+      setError(msg);
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -24,7 +31,7 @@ export default function ForgotPassword() {
       <div className="max-w-md w-full bg-neutral-900 border border-neutral-800 rounded-2xl p-8 space-y-6">
         <div className="text-center">
           <div className="w-12 h-12 mx-auto mb-4 rounded-xl bg-amber-500 flex items-center justify-center">
-            <Sparkles className="w-6 h-6 text-white" />
+            <Scissors className="w-6 h-6 text-white" />
           </div>
           <h2 className="text-2xl font-bold text-white">Reset Password</h2>
           <p className="text-neutral-400 text-sm">
@@ -49,6 +56,10 @@ export default function ForgotPassword() {
                 className="w-full pl-10 pr-4 py-3 rounded-xl bg-neutral-800 text-white border border-neutral-700"
               />
             </div>
+
+            {error && (
+              <p className="text-red-400 text-sm text-center">{error}</p>
+            )}
 
             <Button type="submit" className="w-full" disabled={loading}>
               {loading ? "Sending..." : "Send Reset Link"}

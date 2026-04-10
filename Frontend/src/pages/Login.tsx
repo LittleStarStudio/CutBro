@@ -142,7 +142,7 @@ export default function Login() {
           autoComplete="email"
           placeholder="you@example.com"
           value={email}
-          onChange={(e) => { setEmail(e.target.value); setError(null); }}
+          onChange={(e) => setEmail(e.target.value)}
         />
 
         <div className="space-y-2">
@@ -150,7 +150,7 @@ export default function Login() {
             label="Password"
             placeholder="Enter your password"
             value={password}
-            onChange={(e) => { setPassword(e.target.value); setError(null); }}
+            onChange={(e) => setPassword(e.target.value)}
           />
 
           <div className="text-right">

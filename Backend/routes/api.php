@@ -52,34 +52,28 @@ use Illuminate\Http\Request;
  */
 Route::get('/auth/verify-email/{id}/{hash}', function (Request $request, $id, $hash) {
 
-    $user = User::findOrFail($id);
+    $frontendUrl = config('app.frontend_url');
 
-    // Validasi hash
-    if (! hash_equals(
-        sha1($user->getEmailForVerification()),
-        $hash
-    )) {
-        return response()->json([
-            'success' => false,
-            'message' => 'Invalid verification link'
-        ], 403);
+    if (! $request->hasValidSignature()) {
+        return redirect($frontendUrl . '/verify-email?status=invalid');
     }
 
-    // Jika sudah diverifikasi
+    $user = User::find($id);
+
+    if (! $user) {
+        return redirect($frontendUrl . '/verify-email?status=invalid');
+    }
+
+    if (! hash_equals(sha1($user->getEmailForVerification()), $hash)) {
+        return redirect($frontendUrl . '/verify-email?status=invalid');
+    }
+
     if ($user->hasVerifiedEmail()) {
-        return response()->json([
-            'success' => true,
-            'message' => 'Email already verified'
-        ]);
+        return redirect($frontendUrl . '/verify-email?status=already_verified');
     }
 
-    // Tandai verified
     $user->markEmailAsVerified();
-
-    return response()->json([
-        'success' => true,
-        'message' => 'Email verified successfully'
-    ]);
+    return redirect($frontendUrl . '/verify-email?status=success');
 
 })->name('verification.verify');
 

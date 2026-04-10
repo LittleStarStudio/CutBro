@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { ArrowLeft, Sparkles } from "lucide-react";
+import { ArrowLeft, Scissors } from "lucide-react";
 import type { Role } from "@/lib/auth";
 
 interface AuthLayoutProps {
@@ -47,7 +47,7 @@ export default function AuthLayout({
         {/* ================= HEADER ================= */}
         <div className="text-center mb-8">
           <div className="w-12 h-12 mx-auto mb-4 rounded-xl bg-amber-500 flex items-center justify-center">
-            <Sparkles className="w-6 h-6 text-white" />
+            <Scissors className="w-6 h-6 text-white" />
           </div>
 
           <h2 className="text-3xl font-bold text-white">{title}</h2>

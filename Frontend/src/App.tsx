@@ -12,6 +12,7 @@ import Register from "@/pages/Register";
 import PricingSection from "./pages/PricingSection";
 import ForgotPassword from "@/pages/ForgotPassword";
 import ResetPassword from "./pages/ResetPassword";
+import VerifyEmail from "@/pages/VerifyEmail";
 
 import AdminDashboard from "@/pages/admin/AdminDashboard";
 import AdminBarbershops from "./pages/admin/Barbershops";
@@ -79,6 +80,7 @@ function AnimatedRoutes() {
         <Route path="/pricing" element={<PricingSection />} />
         <Route path="/forgot-password" element={<ForgotPassword />} />
         <Route path="/reset-password" element={<ResetPassword />} />
+        <Route path="/verify-email" element={<VerifyEmail />} />
         <Route path="/billing" element={<ProtectedRoute allow={["owner"]}><Billing /></ProtectedRoute>} />
         <Route path="/subscription/pay" element={<ProtectedRoute allow={["owner"]}><SubscriptionPayment /></ProtectedRoute>} />
 

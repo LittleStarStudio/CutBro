@@ -400,12 +400,13 @@ class AuthController extends BaseController
             $request->only('email')
         );
 
-        if ($status === Password::RESET_LINK_SENT) {
-            return $this->success('Password reset link sent to your email');
-        }
+        return match ($status) {
+            Password::RESET_LINK_SENT => $this->success('Password reset link sent to your email'),
+            Password::RESET_THROTTLED => $this->error('Please wait a moment before requesting another reset link.', 429),
+            Password::INVALID_USER    => $this->error('No account found with that email address.', 404),
+            default                   => $this->error('Failed to send reset link. Please try again.', 500),
+        };
 
-        // Apakah email ada / tidak
-        return $this->success('If the email exists, a reset link has been sent');
     }
 
     /**
@@ -442,10 +443,12 @@ class AuthController extends BaseController
             $request->only('email', 'password', 'password_confirmation', 'token'),
             function (User $user, string $password) {
                 $user->forceFill([
-                    'password' => bcrypt($password),
+                    'password'       => bcrypt($password),
+                    'login_attempts' => 0,
+                    'locked_until'   => null,
                 ])->save();
 
-                // optional: revoke all tokens
+                // Revoke all tokens so user must login again
                 $user->tokens()->delete();
             }
         );
