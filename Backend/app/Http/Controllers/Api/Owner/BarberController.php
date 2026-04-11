@@ -3,8 +3,12 @@
 namespace App\Http\Controllers\Api\Owner;
 
 use App\Http\Controllers\Api\BaseController;
+
 use App\Models\Barber;
+
 use Illuminate\Http\Request;
+use Illuminate\Validation\Rule;
+
 use App\Services\BarberService;
 
 class BarberController extends BaseController
@@ -42,9 +46,9 @@ class BarberController extends BaseController
         }
         // --- End plan limit check ---
 
-        $data = $request->validate([
+         $data = $request->validate([
             'name' => 'required|string|max:255',
-            'email' => 'required|email|unique:users,email',
+            'email' => ['required', 'email', Rule::unique('users', 'email')->whereNull('deleted_at')],
             'password' => 'required|string|min:6',
             'bio' => 'nullable|string',
             'photo_url' => 'nullable|string',
@@ -64,9 +68,12 @@ class BarberController extends BaseController
         }
 
         $data = $request->validate([
-            'bio' => 'nullable|string',
+            'name'      => 'sometimes|string|max:255',
+            'email'     => ['sometimes', 'email', Rule::unique('users', 'email')->ignore($barber->user_id)->whereNull('deleted_at')],
+            'password'  => 'sometimes|nullable|string|min:6',
+            'bio'       => 'nullable|string',
             'photo_url' => 'nullable|string',
-            'status' => 'sometimes|in:available,off'
+            'status'    => 'sometimes|in:available,off',
         ]);
 
         return $this->success(
@@ -82,10 +89,19 @@ class BarberController extends BaseController
             abort(403, 'Unauthorized access to this barber');
         }
 
+        $hasActiveBookings = $barber->bookings()
+            ->whereIn('status', ['pending_payment', 'confirmed', 'in_progress'])
+            ->exists();
+
+        if ($hasActiveBookings) {
+            return $this->error('Cannot delete barber with active or pending bookings.', 422);
+        }
+
         $this->service->delete($barber);
 
         return $this->success([
             'message' => 'Barber deleted'
         ]);
     }
+
 }
