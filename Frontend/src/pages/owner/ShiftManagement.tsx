@@ -32,6 +32,7 @@ export default function ShiftManagement() {
 
   const { shiftSchedule, setShiftSchedule } = useShiftSchedule();
   const [current, setCurrent] = useState<ShiftSchedule>({ ...shiftSchedule });
+  const [opWindow, setOpWindow] = useState<{ open: string; close: string } | null>(null);
 
   const hasChanges = useMemo(
     () => JSON.stringify(shiftSchedule) !== JSON.stringify(current),
@@ -54,7 +55,27 @@ export default function ShiftManagement() {
       });
       setShiftSchedule(schedule);
       setCurrent({ ...schedule });
+    }).catch(() => {
+      toast.error("Load Failed", "Failed to load shift data. Please refresh the page.");
+    });
+
+    ownerService.getBarbershopProfile().then((data) => {
+      const openDays = (data.operational_hours ?? []).filter(
+        (h) => h.is_open && h.open_time && h.close_time
+      );
+      if (openDays.length > 0) {
+        const earliestOpen = openDays.reduce(
+          (min, h) => (h.open_time! < min ? h.open_time! : min),
+          openDays[0].open_time!
+        );
+        const latestClose = openDays.reduce(
+          (max, h) => (h.close_time! > max ? h.close_time! : max),
+          openDays[0].close_time!
+        );
+        setOpWindow({ open: earliestOpen.slice(0, 5), close: latestClose.slice(0, 5) });
+      }
     }).catch(() => {});
+
   }, []);
 
   const toggleShift = (shift: ShiftKey) => {
@@ -73,6 +94,31 @@ export default function ShiftManagement() {
 
   const handleSave = async () => {
     try {
+      // Validate 1: end time must be after start time
+      const invalidOrder = (["morning", "afternoon", "evening"] as ShiftKey[]).filter(
+        (key) => current[key].enabled && current[key].start >= current[key].end
+      );
+      if (invalidOrder.length > 0) {
+        toast.error("Invalid Time", "End time must be after start time for all active shifts.");
+        return;
+      }
+
+      // Validate 2: shift must be within operational hours
+      if (opWindow) {
+        const outOfRange = (["morning", "afternoon", "evening"] as ShiftKey[]).filter(
+          (key) =>
+            current[key].enabled &&
+            (current[key].start < opWindow.open || current[key].end > opWindow.close)
+        );
+        if (outOfRange.length > 0) {
+          toast.error(
+            "Outside Operating Hours",
+            `Shift times must be within your operating hours (${opWindow.open} – ${opWindow.close}).`
+          );
+          return;
+        }
+      }
+
       const shifts = (["morning", "afternoon", "evening"] as ShiftKey[]).map((key) => ({
         name:       key,
         start_time: current[key].start,

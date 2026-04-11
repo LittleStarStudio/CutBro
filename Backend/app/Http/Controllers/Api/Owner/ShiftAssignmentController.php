@@ -65,6 +65,13 @@ class ShiftAssignmentController extends Controller
         $shift = Shift::where('id', $request->shift_id)
             ->where('barbershop_id', $barbershopId)
             ->firstOrFail();
+        
+        if ($shift->status !== 'active') {
+            return response()->json([
+                'success' => false,
+                'message' => 'This shift is inactive and cannot be assigned to a barber.',
+            ], 422);
+        }
 
         $dayInt = $this->dayToInt($request->day_of_week);
 
@@ -122,6 +129,14 @@ class ShiftAssignmentController extends Controller
 
         $barber = Barber::where('id', $request->barber_id)->where('barbershop_id', $barbershopId)->firstOrFail();
         $shift  = Shift::where('id', $request->shift_id)->where('barbershop_id', $barbershopId)->firstOrFail();
+
+        if ($shift->status !== 'active') {
+            return response()->json([
+                'success' => false,
+                'message' => 'This shift is inactive and cannot be assigned to a barber.',
+            ], 422);
+        }
+
         $dayInt = $this->dayToInt($request->day_of_week);
 
         // Duplicate check (exclude self)

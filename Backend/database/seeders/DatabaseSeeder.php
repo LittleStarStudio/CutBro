@@ -21,9 +21,6 @@ class DatabaseSeeder extends Seeder
             ServiceCategorySeeder::class,
             ServiceSeeder::class,
 
-            ShiftSeeder::class,
-            BarberShiftAssignmentSeeder::class,
-
             OperationalHourSeeder::class,
 
             BookingSeeder::class,

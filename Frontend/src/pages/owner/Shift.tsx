@@ -375,7 +375,7 @@ export default function OwnerBarberShifts() {
   const [showDuplicateModal, setShowDuplicateModal] = useState(false);
   const [duplicateInfo, setDuplicateInfo]           = useState<{ barberName: string; day: string; existingShift: BarberShift | null }>({ barberName: "", day: "", existingShift: null });
 
-  const { shiftSchedule } = useShiftSchedule();
+  const { shiftSchedule, setShiftSchedule } = useShiftSchedule();
 
   const activeShiftPresets = useMemo(
     () => ALL_SHIFT_PRESETS.filter((s) => shiftSchedule[s.shiftKey]?.enabled),
@@ -413,7 +413,21 @@ export default function OwnerBarberShifts() {
     }).catch(() => {});
     ownerService.getShifts().then((data) => {
       setApiShifts(data.map((s) => ({ id: s.id, label: s.label })));
+
+      const schedule = { ...shiftSchedule };
+      data.forEach((s) => {
+        const key = s.name as ShiftKey;
+        if (key === "morning" || key === "afternoon" || key === "evening") {
+          schedule[key] = {
+            enabled: s.status === "active",
+            start:   s.start_time,
+            end:     s.end_time,
+          };
+        }
+      });
+      setShiftSchedule(schedule);
     }).catch(() => {});
+
   }, []);
 
   const filteredShifts = useMemo(() => {
