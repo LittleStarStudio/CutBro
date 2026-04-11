@@ -24,13 +24,15 @@ export interface DashboardData {
 export interface OperationalHour {
   day: string;
   is_open: boolean;
-  open_time: string;
-  close_time: string;
+  open_time: string | null;
+  close_time: string | null;
 }
 
 export interface BarbershopProfile {
   name: string;
   slug: string;
+  subscription_plan: string;
+  city: string;
   address: string;
   phone: string;
   description: string | null;

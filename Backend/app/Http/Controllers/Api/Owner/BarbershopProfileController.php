@@ -39,8 +39,10 @@ class BarbershopProfileController extends Controller
             'data'    => [
                 'name'              => $barbershop->name,
                 'slug'              => $barbershop->slug,
+                'subscription_plan' => $barbershop->subscription_plan ?? 'free',
                 'address'           => $barbershop->address,
                 'phone'             => $barbershop->phone,
+                'city'              => $barbershop->city,
                 'description'       => $barbershop->description,
                 'photos'            => $photos,
                 'operational_hours' => $hours,
@@ -61,6 +63,7 @@ class BarbershopProfileController extends Controller
             'address'                       => 'required|string',
             'phone'                         => 'required|string|max:20',
             'description'                   => 'nullable|string',
+            'city'                          => 'required|string|max:100',
             'photo'                         => 'nullable|image|max:2048',
             'operational_hours'             => 'nullable|array',
             'operational_hours.*.day'       => 'required|string|in:Sunday,Monday,Tuesday,Wednesday,Thursday,Friday,Saturday',
@@ -74,6 +77,7 @@ class BarbershopProfileController extends Controller
         $barbershop->address     = $request->address;
         $barbershop->phone       = $request->phone;
         $barbershop->description = $request->description;
+        $barbershop->city        = $request->city;
 
         // Handle photo upload
         if ($request->hasFile('photo')) {
@@ -82,6 +86,11 @@ class BarbershopProfileController extends Controller
             }
             $path = $request->file('photo')->store('barbershops', 'public');
             $barbershop->logo_url = $path;
+        } elseif ($request->input('remove_photo') === '1') {
+            if ($barbershop->logo_url) {
+                Storage::disk('public')->delete($barbershop->logo_url);
+            }
+            $barbershop->logo_url = null;
         }
 
         $barbershop->save();
