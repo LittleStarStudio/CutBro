@@ -31,6 +31,8 @@ use App\Http\Controllers\Api\Admin\LoginLogController as AdminLoginLogController
 use App\Http\Controllers\Api\Admin\SubscriptionPlanController as AdminSubscriptionPlanController;
 use App\Http\Controllers\Api\Admin\TransactionController as AdminTransactionController;
 
+use App\Http\Controllers\Api\Barber\AttendanceController as BarberAttendanceController;
+
 use App\Http\Controllers\Api\Customer\BookingController as CustomerBookingController;
 use App\Http\Controllers\Api\Customer\ListBookingController as CustomerListBookingController;
 
@@ -182,6 +184,7 @@ Route::prefix('owner')->group(function () {
 
         // Schedule (attendance monitor — read-only)
         Route::get('/schedule', [OwnerScheduleController::class, 'index']);
+        Route::put('/schedule/{assignmentId}/attendance', [OwnerScheduleController::class, 'updateAttendance']);
 
         // Promos
         Route::get('/promos', [PromoController::class, 'index']);
@@ -273,6 +276,14 @@ Route::prefix('customer')->group(function () {
     });
 
 });
+
+// Barber
+Route::prefix('barber')->middleware(['auth:sanctum', 'verified.api', 'token.expired', 'role:barber'])->group(function () {
+    Route::get('/attendance/today',    [BarberAttendanceController::class, 'today']);
+    Route::post('/attendance/checkin', [BarberAttendanceController::class, 'checkin']);
+    Route::post('/attendance/checkout', [BarberAttendanceController::class, 'checkout']); 
+});
+
 
 // Public routes
 // Midtrans callback (public — no auth required)

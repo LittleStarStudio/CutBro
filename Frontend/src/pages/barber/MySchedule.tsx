@@ -1,9 +1,12 @@
 import DashboardLayout from "@/components/dashboard/DashboardLayout";
-import { useState, useEffect, useMemo, useCallback } from "react";
+import { useState, useEffect, useMemo } from "react";
 import {
   Play,
-  AlertTriangle, Clock, Home, RotateCcw,
+  AlertTriangle, Clock, Home,
 } from "lucide-react";
+import * as barberService from "@/services/barber.service";
+import type { TodayAttendance } from "@/services/barber.service";
+import { useToast } from "@/components/ui/Toast";
 
 import { barberLogo, barberMenu } from "@/components/config/Menu";
 import { logout, getUser } from "@/lib/auth";
@@ -51,8 +54,6 @@ const EMPTY_LOG: TimeLog = {
   clockIn: null,
   clockOut: null,
 };
-
-const UNDO_GRACE_MS = 2 * 60 * 1000; // 2 menit
 
 /* ================= ROW COLORS ================= */
 const ROW_COLORS: Record<ShiftStatus, string> = {
@@ -189,8 +190,21 @@ function PanelButton({ label, icon, onClick, variant, disabled }: PanelButtonPro
 export default function BarberSchedulePage() {
   const [shifts, setShifts]               = useState<BarberShift[]>([]);
   const [clock, setClock]                 = useState(getNowTime());
-  const [clockOutTime, setClockOutTime]   = useState<number | null>(null);
   const currentUser = getUser();
+
+  const toast = useToast();
+  const [todayAttendance, setTodayAttendance] = useState<TodayAttendance | null>(null);
+  const [isSubmitting, setIsSubmitting]       = useState(false);
+
+  const fetchAttendance = () => {
+    barberService.getTodayAttendance()
+      .then(setTodayAttendance)
+      .catch(() => {
+        toast.error("Connection Error", "Failed to load attendance data. Please refresh.");
+      });
+  };
+
+  useEffect(() => { fetchAttendance(); }, []);
 
   /* ── Generate & clock tick ───────────────────────────────── */
   useEffect(() => { setShifts(generateWeeklyShifts()); }, []);
@@ -211,108 +225,66 @@ export default function BarberSchedulePage() {
   /* ── Today's shift ───────────────────────────────────────── */
   const todayShift = useMemo(() => shifts.find((s) => isToday(s.date)) ?? null, [shifts]);
 
+  const log = {
+    clockIn:  todayAttendance?.actual_checkin  ?? null,
+    clockOut: todayAttendance?.actual_checkout ?? null,
+  };
+  const shiftLabel  = todayAttendance?.shift?.label ?? "No Shift Today";
+  const canClockIn  = !!(todayAttendance?.has_shift_today
+                      && todayAttendance.assignment_status === "active"
+                      && !todayAttendance.checked_in);
+  const canClockOut = !!(todayAttendance?.checked_in && !todayAttendance?.checked_out);
+
   /* ── Total work minutes (today) ──────────────────────────── */
-  const totalMinutes = useMemo(
-    () => todayShift ? calcTotalMinutes(todayShift.log) : 0,
-    [todayShift]
-  );
-
-  /* ── Grace period undo ───────────────────────────────────── */
-  const canUndoClockOut = useMemo(() => {
-    if (!clockOutTime) return false;
-    return Date.now() - clockOutTime < UNDO_GRACE_MS;
-  }, [clockOutTime, clock]);
-
-  /* ── Sisa waktu undo (detik) ─────────────────────────────── */
-  const undoSecondsLeft = useMemo(() => {
-    if (!clockOutTime) return 0;
-    return Math.max(0, Math.ceil((UNDO_GRACE_MS - (Date.now() - clockOutTime)) / 1000));
-  }, [clockOutTime, clock]);
+  const totalMinutes = useMemo(() => calcTotalMinutes(log), [log]);
 
   /* ── Attention notes — hanya deficit ────────────────────── */
   const attentionNotes = useMemo(() => {
     const notes: string[] = [];
+    if (!todayAttendance?.has_shift_today || todayAttendance.assignment_status !== "active") return notes;
 
-    // Tidak ada shift atau day off → kosong
-    if (!todayShift || !todayShift.shiftType) return notes;
+    const shiftStart    = log.clockIn ? toMin(log.clockIn.slice(0, 5)) : null;
+    const shiftEnd      = todayAttendance.shift?.end_time
+                            ? toMin(todayAttendance.shift.end_time)
+                            : null;
 
-    const shiftStart    = toMin(SHIFT_CONFIG[todayShift.shiftType].start);
-    const shiftDuration = toMin(SHIFT_CONFIG[todayShift.shiftType].end) - shiftStart;
-    const nowMin        = toMin(clock.slice(0, 5));
-
-    /* ── Case 1: Sudah clock in & clock out ──────────────── */
-    if (todayShift.log.clockIn && todayShift.log.clockOut) {
-      const clockInMin  = toMin(todayShift.log.clockIn.slice(0, 5));
-      const lateMinutes = Math.max(0, clockInMin - shiftStart);
-      const worked      = calcTotalMinutes(todayShift.log);
-      const deficit     = (shiftDuration + lateMinutes) - worked;
-
-      if (deficit > 0) {
-        notes.push(`You are short ${formatDuration(deficit)} of required hours.`);
-        if (canUndoClockOut) {
-          notes.push(`Did you clock out by mistake? You can undo it within ${undoSecondsLeft}s.`);
-        }
-      }
-      return notes;
+    if (log.clockIn && log.clockOut && shiftStart !== null && shiftEnd !== null) {
+      const worked  = calcTotalMinutes(log);
+      const required = shiftEnd - toMin(todayAttendance.shift!.start_time);
+      const deficit = required - worked;
+      if (deficit > 0) notes.push(`You are short ${formatDuration(deficit)} of required hours.`);
     }
 
-    /* ── Case 2: Sedang aktif (sudah clock in, belum clock out) ── */
-    if (todayShift.status === "active" && todayShift.log.clockIn) {
-      const clockInMin      = toMin(todayShift.log.clockIn.slice(0, 5));
-      const lateMinutes     = Math.max(0, clockInMin - shiftStart);
-      const requiredMinutes = shiftDuration + lateMinutes;
-      const workedSoFar     = nowMin - clockInMin;
-      const deficit         = requiredMinutes - Math.max(0, workedSoFar);
-
-      if (deficit > 0) {
-        notes.push(`You are short ${formatDuration(deficit)} of required hours.`);
-      }
-    }
-
-    // Belum clock in → kosong
     return notes;
-  }, [todayShift, clock, canUndoClockOut, undoSecondsLeft]);
+  }, [todayAttendance, log]);
 
-  /* ── Action: update log field ─────────────────────────────── */
-  const updateTodayLog = useCallback((field: keyof TimeLog, newStatus?: ShiftStatus) => {
-    setShifts((prev) =>
-      prev.map((s) => {
-        if (!isToday(s.date)) return s;
-        return {
-          ...s,
-          status: newStatus ?? s.status,
-          log: { ...s.log, [field]: getNowTime() },
-        };
-      })
-    );
-  }, []);
-
-  const handleClockIn  = () => updateTodayLog("clockIn",  "active");
-
-  const handleClockOut = () => {
-    updateTodayLog("clockOut", "completed");
-    setClockOutTime(Date.now());
+  const handleClockIn = async () => {
+    setIsSubmitting(true);
+    try {
+      await barberService.checkIn();
+      fetchAttendance();
+      toast.success("Checked In", "Your attendance has been recorded.");
+    } catch (err: any) {
+      const msg = err?.response?.data?.message ?? "Check-in failed.";
+      toast.error("Check-in Failed", msg);
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
-  const handleUndoClockOut = useCallback(() => {
-    setClockOutTime(null);
-    setShifts((prev) =>
-      prev.map((s) => {
-        if (!isToday(s.date)) return s;
-        return { ...s, status: "active", log: { ...s.log, clockOut: null } };
-      })
-    );
-  }, []);
-
-  const canClockIn  = todayShift?.status === "scheduled";
-  const canClockOut = todayShift?.status === "active";
-
-  const log = todayShift?.log ?? EMPTY_LOG;
-
-  /* ── Shift label for left panel ──────────────────────────── */
-  const shiftLabel = todayShift?.shiftType
-    ? SHIFT_CONFIG[todayShift.shiftType].label
-    : "No Shift Today";
+  const handleClockOut = async () => {
+    setIsSubmitting(true);
+    try {
+      await barberService.checkOut();
+      fetchAttendance();
+      toast.success("Checked Out", "Clock-out has been recorded.");
+    } catch (err: any) {
+      const msg = err?.response?.data?.message ?? "Check-out failed.";
+      toast.error("Check-out Failed", msg);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
 
   /* ── Week range ──────────────────────────────────────────── */
   const weekLabel = useMemo(() => {
@@ -358,20 +330,8 @@ export default function BarberSchedulePage() {
                   icon={log.clockIn ? <Home size={14} /> : <Play size={14} />}
                   onClick={log.clockIn ? handleClockOut : handleClockIn}
                   variant={log.clockIn ? "red" : "dark"}
-                  disabled={log.clockIn ? !canClockOut : !canClockIn}
+                  disabled={isSubmitting || (log.clockIn ? !canClockOut : !canClockIn)}
                 />
-              ) : canUndoClockOut ? (
-                <div className="space-y-1.5">
-                  <PanelButton
-                    label={`Undo Clock Out (${undoSecondsLeft}s)`}
-                    icon={<RotateCcw size={14} />}
-                    onClick={handleUndoClockOut}
-                    variant="outline"
-                  />
-                  <p className="text-zinc-600 text-[10px] text-center leading-tight">
-                    Grace period — tap to cancel
-                  </p>
-                </div>
               ) : (
                 <PanelButton label="Clocked Out" icon={<Home size={14} />} onClick={() => {}} variant="dark" disabled />
               )}
@@ -477,18 +437,24 @@ export default function BarberSchedulePage() {
                         <span className="text-sm text-zinc-300 whitespace-nowrap">{shiftLbl}</span>
                       </td>
                       <td className="px-4 py-3 whitespace-nowrap">
-                        <span className={`text-sm font-mono ${shift.log.clockIn ? "text-emerald-400" : "text-zinc-600"}`}>
-                          {shift.log.clockIn
-                            ? shift.log.clockIn
-                            : (shift.shiftType ? shift.startTime + ":00" : "---")}
-                        </span>
+                        {(() => {
+                          const val = today ? log.clockIn : shift.log.clockIn;
+                          return (
+                            <span className={`text-sm font-mono ${val ? "text-emerald-400" : "text-zinc-600"}`}>
+                              {val ?? "---"}
+                            </span>
+                          );
+                        })()}
                       </td>
                       <td className="px-4 py-3 whitespace-nowrap">
-                        <span className={`text-sm font-mono ${shift.log.clockOut ? "text-red-400" : "text-zinc-600"}`}>
-                          {shift.log.clockOut
-                            ? shift.log.clockOut
-                            : (shift.shiftType ? shift.endTime + ":00" : "---")}
-                        </span>
+                        {(() => {
+                          const val = today ? log.clockOut : shift.log.clockOut;
+                          return (
+                            <span className={`text-sm font-mono ${val ? "text-red-400" : "text-zinc-600"}`}>
+                              {val ?? "---"}
+                            </span>
+                          );
+                        })()}
                       </td>
                     </tr>
                   );
@@ -519,18 +485,14 @@ export default function BarberSchedulePage() {
                   <div className="flex gap-4 text-xs">
                     <div>
                       <p className="text-zinc-500">Clock In</p>
-                      <p className="font-mono text-emerald-400">
-                        {shift.log.clockIn
-                          ? shift.log.clockIn
-                          : (shift.shiftType ? shift.startTime + ":00" : "---")}
+                      <p className={`font-mono ${(today ? log.clockIn : shift.log.clockIn) ? "text-emerald-400" : "text-zinc-600"}`}>
+                        {(today ? log.clockIn : shift.log.clockIn) ?? "---"}
                       </p>
                     </div>
                     <div>
                       <p className="text-zinc-500">Clock Out</p>
-                      <p className="font-mono text-red-400">
-                        {shift.log.clockOut
-                          ? shift.log.clockOut
-                          : (shift.shiftType ? shift.endTime + ":00" : "---")}
+                      <p className={`font-mono ${(today ? log.clockOut : shift.log.clockOut) ? "text-red-400" : "text-zinc-600"}`}>
+                        {(today ? log.clockOut : shift.log.clockOut) ?? "---"}
                       </p>
                     </div>
                   </div>

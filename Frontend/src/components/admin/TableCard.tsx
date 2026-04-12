@@ -15,6 +15,7 @@ interface TableCardProps {
   setSearchQuery: (value: string) => void;
   searchPlaceholder: string;
   filters?: Filter[];
+  filtersExtra?: ReactNode;
   isEmpty: boolean;
   emptyIcon: LucideIcon;
   emptyTitle: string;
@@ -27,6 +28,7 @@ export default function TableCard({
   setSearchQuery,
   searchPlaceholder,
   filters = [],
+  filtersExtra,
   isEmpty,
   emptyIcon,
   emptyTitle,
@@ -42,6 +44,7 @@ export default function TableCard({
         setSearchQuery={setSearchQuery}
         searchPlaceholder={searchPlaceholder}
         filters={filters}
+        extraFilters={filtersExtra}
       />
 
       {isEmpty ? (

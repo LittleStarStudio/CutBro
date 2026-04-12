@@ -25,4 +25,10 @@ class BarberShiftAssignment extends Model
     {
         return $this->belongsTo(Shift::class);
     }
+
+    public function attendances()
+    {
+        return $this->hasMany(BarberAttendance::class, 'barber_shift_assignment_id');
+    }
+
 }

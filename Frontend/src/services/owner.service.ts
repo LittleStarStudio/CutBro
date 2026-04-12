@@ -62,16 +62,25 @@ export interface ShiftAssignment {
 }
 
 export interface ScheduleEntry {
-  id: number;
-  barber_id: number;
-  barber_name: string;
-  day: string;
-  shift_label: string;
-  scheduled_start: string;
-  scheduled_end: string;
-  actual_checkin: string | null;
-  status: "active" | "off" | "leave";
+  attendance_id:     number | null;
+  assignment_id:     number;
+  barber_id:         number;
+  barber_name:       string;
+  barber_email:      string;
+  barber_photo:      string | null;
+  day:               string;
+  date:              string;
+  shift_label:       string;
+  scheduled_start:   string;
+  scheduled_end:     string;
+  assignment_status: "active" | "off" | "leave";
+  actual_checkin:    string | null;
+  actual_checkout:   string | null; 
+  status:            "on_time" | "late" | "absent";
+  late_minutes:      number;
+  has_attendance:    boolean;
 }
+
 
 export interface Promo {
   id: number;
@@ -253,8 +262,20 @@ export const deleteShiftAssignment = (id: number) =>
    SCHEDULE
 ================================================================ */
 
-export const getSchedule = () =>
-  api.get<{ success: boolean; data: ScheduleEntry[] }>("/owner/schedule").then(unwrap<ScheduleEntry[]>);
+export const getSchedule = (date?: string) =>
+  api.get<{ success: boolean; data: ScheduleEntry[] }>("/owner/schedule", {
+    params: date ? { date } : undefined,
+  }).then(unwrap<ScheduleEntry[]>);
+
+export const updateAttendance = (
+  assignmentId: number,
+  data: {
+    date:           string;
+    actual_checkin: string | null;
+    status:         "on_time" | "late" | "absent";
+    late_minutes:   number;
+  }
+) => api.put(`/owner/schedule/${assignmentId}/attendance`, data);
 
 /* ================================================================
    PROMOS
