@@ -1,6 +1,6 @@
 import DashboardLayout from "@/components/dashboard/DashboardLayout";
 import { useState, useEffect, useMemo } from "react";
-import { Scissors, UserCheck, UserX, Plus } from "lucide-react";
+import { Scissors, User, UserCheck, UserX, Plus } from "lucide-react";
 
 import { ownerLogo, ownerMenu } from "@/components/config/Menu";
 import { useAuth } from "@/components/context/AuthContext";
@@ -110,11 +110,11 @@ export default function OwnerBarbers() {
   ];
 
   const viewFormFields: FormField[] = [
-    { name: "photo_url", label: "Photo",       type: "image",    disabled: true },
-    { name: "name",      label: "Full Name",   type: "text",     disabled: true },
-    { name: "email",     label: "Email",       type: "email",    disabled: true },
-    { name: "bio",       label: "Bio / Notes", type: "textarea", disabled: true, rows: 3 },
-    { name: "status",    label: "Status",      type: "select",   disabled: true, options: [{ value: "active", label: "Active" }, { value: "inactive", label: "Inactive" }] },
+    { name: "photo_url", label: "Photo",       type: "image",    disabled: true                                                                                                    },
+    { name: "name",      label: "Full Name",   type: "text",     readOnly: true                                                                                                    },
+    { name: "email",     label: "Email",       type: "email",    readOnly: true                                                                                                    },
+    { name: "bio",       label: "Bio / Notes", type: "textarea", readOnly: true, rows: 3                                                                                           },
+    { name: "status",    label: "Status",      type: "select",   readOnly: true, options: [{ value: "active", label: "Active" }, { value: "inactive", label: "Inactive" }] },
   ];
 
   /* ================= ADD ================= */
@@ -239,10 +239,8 @@ export default function OwnerBarbers() {
         <div className="flex justify-center">
           {barber.photo_url
             ? <img src={barber.photo_url} alt={barber.name} className="w-10 h-10 rounded-full object-cover border border-zinc-700" />
-            : <div className="w-10 h-10 rounded-full bg-zinc-800 border border-zinc-700 flex items-center justify-center text-zinc-500">
-                <svg xmlns="http://www.w3.org/2000/svg" className="w-6 h-6" viewBox="0 0 24 24" fill="currentColor">
-                  <path d="M12 12c2.7 0 4.8-2.1 4.8-4.8S14.7 2.4 12 2.4 7.2 4.5 7.2 7.2 9.3 12 12 12zm0 2.4c-3.2 0-9.6 1.6-9.6 4.8v2.4h19.2v-2.4c0-3.2-6.4-4.8-9.6-4.8z"/>
-                </svg>
+            : <div className="w-10 h-10 rounded-full bg-[#D4AF37]/10 border border-[#D4AF37]/20 flex items-center justify-center text-[#D4AF37]">
+                <User size={18} />
               </div>
           }
         </div>
@@ -320,8 +318,20 @@ export default function OwnerBarbers() {
             data={filteredBarbers}
             renderCard={(barber: Barber) => (
               <MobileCard
-                title={barber.name}
-                subtitle={<p className="text-xs text-[#B8B8B8]">{barber.email}</p>}
+                title={
+                  <div className="flex items-center gap-2">
+                    {barber.photo_url
+                      ? <img src={barber.photo_url} alt={barber.name} className="w-8 h-8 rounded-full object-cover border border-zinc-700 flex-shrink-0" />
+                      : <div className="w-7 h-7 rounded-full bg-[#D4AF37]/10 border border-[#D4AF37]/20 flex items-center justify-center flex-shrink-0">
+                          <User size={12} className="text-[#D4AF37]" />
+                        </div>
+                    }
+                    <div>
+                      <p className="font-semibold text-white">{barber.name}</p>
+                      <p className="text-xs text-zinc-400">{barber.email}</p>
+                    </div>
+                  </div>
+                }
                 headerRight={<Badge text={capitalizeFirst(barber.status)} variant={STATUS_STYLES[barber.status]} showDot dotColor={STATUS_DOT_COLORS[barber.status]} />}
                 fields={[{ label: "Bio", value: barber.bio || "-" }]}
                 actions={<div className="flex justify-end"><ActionButtons actions={[{ type: "view", onClick: () => handleViewClick(barber) }, { type: "edit", onClick: () => handleEditClick(barber) }, { type: "delete", onClick: () => handleDeleteClick(barber) }]} /></div>}

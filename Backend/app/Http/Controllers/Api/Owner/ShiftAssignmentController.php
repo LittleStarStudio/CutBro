@@ -27,13 +27,13 @@ class ShiftAssignmentController extends Controller
     {
         $barbershopId = $request->user()->barbershop_id;
 
-        $assignments = BarberShiftAssignment::with(['barber', 'shift'])
+        $assignments = BarberShiftAssignment::with(['barber.user', 'shift'])
             ->whereHas('barber', fn($q) => $q->where('barbershop_id', $barbershopId))
             ->get()
             ->map(fn($a) => [
                 'id'          => $a->id,
                 'barber_id'   => $a->barber_id,
-                'barber_name' => $a->barber?->name,
+                'barber_name' => $a->barber?->user?->name,
                 'shift_id'    => $a->shift_id,
                 'shift_label' => $a->shift ? ucfirst($a->shift->name) : null,
                 'start_time'  => $a->shift ? substr($a->shift->start_time, 0, 5) : null,
@@ -75,7 +75,7 @@ class ShiftAssignmentController extends Controller
 
         $dayInt = $this->dayToInt($request->day_of_week);
 
-        // Check for duplicate (unique constraint: barber_id + day_of_week)
+        // Check for duplicate (active records only)
         $exists = BarberShiftAssignment::where('barber_id', $barber->id)
             ->where('day_of_week', $dayInt)
             ->exists();
@@ -83,16 +83,32 @@ class ShiftAssignmentController extends Controller
         if ($exists) {
             return response()->json([
                 'success' => false,
-                'message' => "{$barber->name} already has a shift on {$request->day_of_week}.",
+                'message' => "{$barber->user?->name} already has a shift on {$request->day_of_week}.",
             ], 422);
         }
 
-        $assignment = BarberShiftAssignment::create([
-            'barber_id'   => $barber->id,
-            'shift_id'    => $shift->id,
-            'day_of_week' => $dayInt,
-            'status'      => $request->status ?? 'active',
-        ]);
+        // If a soft-deleted record exists for same barber+day, restore it instead of inserting new
+        $trashed = BarberShiftAssignment::withTrashed()
+            ->where('barber_id', $barber->id)
+            ->where('day_of_week', $dayInt)
+            ->whereNotNull('deleted_at')
+            ->first();
+
+        if ($trashed) {
+            $trashed->restore();
+            $trashed->update([
+                'shift_id' => $shift->id,
+                'status'   => $request->status ?? 'active',
+            ]);
+            $assignment = $trashed;
+        } else {
+            $assignment = BarberShiftAssignment::create([
+                'barber_id'   => $barber->id,
+                'shift_id'    => $shift->id,
+                'day_of_week' => $dayInt,
+                'status'      => $request->status ?? 'active',
+            ]);
+        }
 
         return response()->json([
             'success' => true,
@@ -100,7 +116,7 @@ class ShiftAssignmentController extends Controller
             'data'    => [
                 'id'          => $assignment->id,
                 'barber_id'   => $assignment->barber_id,
-                'barber_name' => $barber->name,
+                'barber_name' => $barber->user?->name,
                 'shift_id'    => $assignment->shift_id,
                 'shift_label' => ucfirst($shift->name),
                 'start_time'  => substr($shift->start_time, 0, 5),
@@ -148,7 +164,7 @@ class ShiftAssignmentController extends Controller
         if ($exists) {
             return response()->json([
                 'success' => false,
-                'message' => "{$barber->name} already has a shift on {$request->day_of_week}.",
+                'message' => "{$barber->user?->name} already has a shift on {$request->day_of_week}.",
             ], 422);
         }
 

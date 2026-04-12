@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import Modal from './Modal';
-import { Save, X, AlertCircle, Eye, EyeOff } from 'lucide-react';
+import { Save, X, AlertCircle, Eye, EyeOff, User } from 'lucide-react';
 
 export type FieldType = 
   | 'text' 
@@ -21,6 +21,7 @@ export interface FormField {
   placeholder?: string;
   required?: boolean;
   disabled?: boolean;
+  readOnly?: boolean;
   options?: { value: string; label: string }[];
   rows?: number;
   accept?: string;
@@ -141,7 +142,8 @@ const EditModal: React.FC<EditModalProps> = ({
     const baseClass = `w-full px-4 py-3 bg-zinc-800 border rounded-xl text-white placeholder-zinc-500 
       focus:outline-none focus:ring-2 transition-colors
       ${hasError ? 'border-red-500 focus:ring-red-500' : 'border-zinc-700 focus:ring-amber-500'}
-      ${field.disabled ? 'opacity-50 cursor-not-allowed' : ''}`;
+      ${field.disabled ? 'opacity-50 cursor-not-allowed' : ''}
+      ${field.readOnly ? 'cursor-default' : ''}`;
 
     switch (field.type) {
       case 'textarea':
@@ -152,6 +154,7 @@ const EditModal: React.FC<EditModalProps> = ({
             placeholder={field.placeholder}
             rows={field.rows || 4}
             disabled={field.disabled}
+            readOnly={field.readOnly}
             className={`${baseClass} resize-none`}
           />
         );
@@ -162,7 +165,7 @@ const EditModal: React.FC<EditModalProps> = ({
             value={formData[field.name] || ''}
             onChange={(e) => handleChange(field.name, e.target.value)}
             disabled={field.disabled}
-            className={baseClass}
+            className={`${baseClass} ${field.readOnly ? 'pointer-events-none' : ''}`}
           >
             <option value="">Select {field.label}</option>
             {field.options?.map((option) => (
@@ -198,10 +201,8 @@ const EditModal: React.FC<EditModalProps> = ({
                 className="w-32 h-32 object-cover rounded-full border-2 border-zinc-700"
               />
             ) : (
-              <div className="w-32 h-32 rounded-full bg-zinc-800 border-2 border-zinc-700 flex items-center justify-center text-zinc-500">
-                <svg xmlns="http://www.w3.org/2000/svg" className="w-16 h-16" viewBox="0 0 24 24" fill="currentColor">
-                  <path d="M12 12c2.7 0 4.8-2.1 4.8-4.8S14.7 2.4 12 2.4 7.2 4.5 7.2 7.2 9.3 12 12 12zm0 2.4c-3.2 0-9.6 1.6-9.6 4.8v2.4h19.2v-2.4c0-3.2-6.4-4.8-9.6-4.8z"/>
-                </svg>
+              <div className="w-32 h-32 rounded-full bg-[#D4AF37]/10 border-2 border-[#D4AF37]/20 flex items-center justify-center text-[#D4AF37]">
+                <User size={48} />
               </div>
             )}
             {!field.disabled && (
@@ -258,6 +259,7 @@ const EditModal: React.FC<EditModalProps> = ({
             onChange={(e) => handleChange(field.name, e.target.value)}
             placeholder={field.placeholder}
             disabled={field.disabled}
+            readOnly={field.readOnly}
             autoComplete={field.type === 'email' ? 'off' : undefined}
             className={baseClass}
           />
