@@ -1,11 +1,12 @@
 import DashboardLayout from "@/components/dashboard/DashboardLayout";
 import { useState, useEffect, useMemo } from "react";
-import { Scissors, Plus } from "lucide-react";
+import { Scissors, Plus, CheckCircle, XCircle } from "lucide-react";
+import StatCard from "@/components/admin/StatsCard";
 
 import { ownerLogo, ownerMenu } from "@/components/config/Menu";
 import { useAuth } from "@/components/context/AuthContext";
 
-import { searchInObject, filterByField } from "@/lib/utils/AdminUtils";
+import { searchInObject } from "@/lib/utils/AdminUtils";
 
 import DeleteModal from "@/components/admin/DeleteModal";
 import ActionButtons from "@/components/admin/ActionButtons";
@@ -29,15 +30,10 @@ interface Service {
   price: number;
   duration: number;
   description?: string;
+  status: "active" | "inactive";
 }
 
 const formatPrice = (n: number) => `Rp ${n.toLocaleString("id-ID")}`;
-
-const STATUS_FILTER_OPTIONS = [
-  { value: "all",      label: "All Status" },
-  { value: "active",   label: "Active"     },
-  { value: "inactive", label: "Inactive"   },
-];
 
 export default function OwnerServices() {
   const toast = useToast();
@@ -64,6 +60,7 @@ export default function OwnerServices() {
         price:        typeof s.price === "string" ? parseFloat(s.price) : s.price,
         duration:     s.duration_minutes,
         description:  s.description ?? undefined,
+        status:       s.is_active ? "active" : "inactive",  
       })));
     }).catch(() => {});
 
@@ -91,12 +88,28 @@ export default function OwnerServices() {
     });
   }, [services, searchQuery, filterCategory]);
 
+  const stats = useMemo(() => ({
+    total:    services.length,
+    active:   services.filter((s) => s.status === "active").length,
+    inactive: services.filter((s) => s.status === "inactive").length,
+  }), [services]);
+
   const formFields: FormField[] = [
     { name: "serviceName", label: "Service Name", type: "text", placeholder: "e.g., Premium Haircut", required: true, validation: (value) => value.length >= 3 ? null : "Service name must be at least 3 characters" },
     { name: "categoryId",  label: "Category",     type: "select", required: true, options: categoryFormOptions },
     { name: "price",       label: "Price (Rp)",   type: "number", placeholder: "75000", required: true, validation: (value) => { const n = parseInt(value); return isNaN(n) || n < 1000 ? "Price must be at least Rp 1,000" : null; }, helperText: "Enter price in Rupiah (e.g., 75000)" },
     { name: "duration",    label: "Duration (minutes)", type: "number", placeholder: "30", required: true, validation: (value) => { const n = parseInt(value); return isNaN(n) || n < 5 ? "Duration must be at least 5 minutes" : null; } },
     { name: "description", label: "Description",  type: "textarea", placeholder: "Describe the service...", rows: 3 },
+    {
+      name: "status",
+      label: "Status",
+      type: "select",
+      required: true,
+      options: [
+        { value: "active",   label: "Active" },
+        { value: "inactive", label: "Inactive" },
+      ],
+    },
   ];
 
   /* ================= ADD ================= */
@@ -111,12 +124,14 @@ export default function OwnerServices() {
         price:            parseInt(data.price),
         duration_minutes: parseInt(data.duration),
         description:      data.description,
+        is_active:        data.status === "active",
       });
       loadData();
       setShowAddModal(false);
       toast.success("Service Added", `${data.serviceName} has been added successfully.`);
-    } catch {
-      toast.error("Add Failed", "Something went wrong. Please try again.");
+    } catch (err: any) {
+      const msg = err?.response?.data?.message ?? "Something went wrong. Please try again.";
+      toast.error("Add Failed", msg);
     } finally {
       setIsLoading(false);
     }
@@ -138,13 +153,15 @@ export default function OwnerServices() {
         price:            parseInt(data.price),
         duration_minutes: parseInt(data.duration),
         description:      data.description,
+        is_active:        data.status === "active", 
       });
       loadData();
       setShowEditModal(false);
       toast.success("Service Updated", `${data.serviceName} has been updated successfully.`);
       setSelectedService(null);
-    } catch {
-      toast.error("Update Failed", "Something went wrong. Please try again.");
+    } catch (err: any) {
+      const msg = err?.response?.data?.message ?? "Something went wrong. Please try again.";
+      toast.error("Update Failed", msg);
     } finally {
       setIsLoading(false);
     }
@@ -162,12 +179,15 @@ export default function OwnerServices() {
     try {
       await ownerService.deleteService(selectedService.id);
       loadData();
-    } catch {
-      toast.error("Delete Failed", "Something went wrong.");
+      setShowDeleteModal(false);
+      setSelectedService(null);
+      toast.success("Service Deleted", `${name} has been removed.`);
+    } catch (err: any) {
+      const msg = err?.response?.data?.message ?? "Something went wrong.";
+      toast.error("Delete Failed", msg);   // ← tampilkan pesan spesifik dari backend
+      setShowDeleteModal(false);
+      setSelectedService(null);
     }
-    setShowDeleteModal(false);
-    setSelectedService(null);
-    toast.success("Service Deleted", `${name} has been removed.`);
   };
 
   const handleCancelDelete = () => {
@@ -176,7 +196,6 @@ export default function OwnerServices() {
   };
 
   const columns = [
-    { key: "no", header: "No", headerClassName: "text-left w-16", render: (service: Service) => <span className="text-[#B8B8B8]">{filteredServices.findIndex((s) => s.id === service.id) + 1}</span> },
     {
       key: "serviceName",
       header: "Service Name",
@@ -191,10 +210,23 @@ export default function OwnerServices() {
     { key: "duration",  header: "Duration", render: (service: Service) => <span className="text-[#B8B8B8]">{service.duration} min</span> },
     { key: "price",     header: "Price",    render: (service: Service) => <span className="text-[#B8B8B8] font-medium">{formatPrice(service.price)}</span> },
     {
+      key: "status",
+      header: "Status",
+      render: (service: Service) => (
+        <span className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-medium ${
+          service.status === "active"
+            ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20"
+            : "bg-zinc-700/50 text-zinc-400 border border-zinc-600"
+        }`}>
+          {service.status === "active" ? "Active" : "Inactive"}
+        </span>
+      ),
+    },
+    {
       key: "actions",
       header: "Actions",
-      headerClassName: "text-right",
-      className: "text-right",
+      headerClassName: "text-center",
+      className: "text-center",
       render: (service: Service) => (
         <ActionButtons actions={[
           { type: "edit",   onClick: () => handleEditClick(service)   },
@@ -219,6 +251,13 @@ export default function OwnerServices() {
       <div className="w-full space-y-6 lg:space-y-8">
         <PageHeader actionButton={{ label: "Add Service", onClick: handleAddClick, icon: Plus }} title={""} />
 
+        {/* Stats Cards */}
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 lg:gap-6">
+          <StatCard icon={Scissors}    title="Total Services" value={stats.total}    />
+          <StatCard icon={CheckCircle} title="Active"         value={stats.active}   iconBgColor="bg-emerald-500/10" iconColor="text-emerald-400" />
+          <StatCard icon={XCircle}     title="Inactive"       value={stats.inactive} iconBgColor="bg-zinc-700/50"    iconColor="text-zinc-400" />
+        </div>
+
         <TableCard
           searchQuery={searchQuery}
           setSearchQuery={setSearchQuery}
@@ -234,26 +273,33 @@ export default function OwnerServices() {
           <DataTable data={filteredServices} columns={columns} />
           <MobileCardList
             data={filteredServices}
-            renderCard={(service: Service) => {
-              const index = filteredServices.findIndex((s) => s.id === service.id);
-              return (
-                <MobileCard
-                  title={<div><p className="text-xs text-[#B8B8B8] mb-1">#{index + 1}</p><p className="font-semibold text-white">{service.serviceName}</p>{service.description && <p className="text-xs text-[#B8B8B8] mt-1">{service.description}</p>}</div>}
-                  headerRight={<span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-[#D4AF37]/10 text-[#D4AF37] border border-[#D4AF37]/20">{service.categoryName}</span>}
-                  fields={[
-                    { label: "Duration", value: `${service.duration} minutes` },
-                    { label: "Price",    value: formatPrice(service.price) },
-                  ]}
-                  actions={<ActionButtons actions={[{ type: "edit", onClick: () => handleEditClick(service) }, { type: "delete", onClick: () => handleDeleteClick(service) }]} />}
-                />
-              );
-            }}
+            renderCard={(service: Service) => (
+              <MobileCard
+                title={
+                  <div>
+                    <p className="font-semibold text-white">{service.serviceName}</p>
+                    {service.description && <p className="text-xs text-[#B8B8B8] mt-1">{service.description}</p>}
+                  </div>
+                }
+                headerRight={<span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-[#D4AF37]/10 text-[#D4AF37] border border-[#D4AF37]/20">{service.categoryName}</span>}
+                fields={[
+                  { label: "Duration", value: `${service.duration} minutes` },
+                  { label: "Price",    value: formatPrice(service.price) },
+                  { label: "Status",   value: (
+                    <span className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-medium ${service.status === "active" ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20" : "bg-zinc-700/50 text-zinc-400 border border-zinc-600"}`}>
+                      {service.status === "active" ? "Active" : "Inactive"}
+                    </span>
+                  )},
+                ]}
+                actions={<div className="flex justify-end"><ActionButtons actions={[{ type: "edit", onClick: () => handleEditClick(service) }, { type: "delete", onClick: () => handleDeleteClick(service) }]} /></div>}
+              />
+            )}
           />
         </TableCard>
       </div>
 
-      <EditModal isOpen={showAddModal} onClose={() => setShowAddModal(false)} onSave={handleSaveAdd} title="Add New Service" subtitle="Create a new service offering" fields={formFields} initialData={{ serviceName: "", categoryId: categoryFormOptions[0]?.value ?? "", price: "", duration: 30, description: "" }} isLoading={isLoading} saveButtonText="Add Service" />
-      <EditModal isOpen={showEditModal} onClose={() => { setShowEditModal(false); setSelectedService(null); }} onSave={handleSaveEdit} title="Edit Service" subtitle="Update service information" fields={formFields} initialData={selectedService ? { serviceName: selectedService.serviceName, categoryId: String(selectedService.categoryId ?? ""), price: selectedService.price, duration: selectedService.duration, description: selectedService.description ?? "" } : {}} isLoading={isLoading} saveButtonText="Save Changes" />
+      <EditModal isOpen={showAddModal} onClose={() => setShowAddModal(false)} onSave={handleSaveAdd} title="Add New Service" subtitle="Create a new service offering" fields={formFields} initialData={{ serviceName: "", categoryId: categoryFormOptions[0]?.value ?? "", price: "", duration: 30, description: "", status: "active" }} isLoading={isLoading} saveButtonText="Add Service" />
+      <EditModal isOpen={showEditModal} onClose={() => { setShowEditModal(false); setSelectedService(null); }} onSave={handleSaveEdit} title="Edit Service" subtitle="Update service information" fields={formFields} initialData={selectedService ? { serviceName: selectedService.serviceName, categoryId: String(selectedService.categoryId ?? ""), price: selectedService.price, duration: selectedService.duration, description: selectedService.description ?? "", status:       selectedService.status } : {}} isLoading={isLoading} saveButtonText="Save Changes" />
       <DeleteModal isOpen={showDeleteModal} title="Delete Service" itemName={selectedService?.serviceName || ""} onConfirm={handleConfirmDelete} onCancel={handleCancelDelete} />
     </DashboardLayout>
   );

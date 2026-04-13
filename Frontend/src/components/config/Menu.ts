@@ -18,6 +18,7 @@ import {
   CalendarClock,
   History,
   ReceiptIcon,
+  Layers,
 } from "lucide-react";
 
 import type { MenuItem } from "@/components/layout/SideBar";
@@ -67,9 +68,9 @@ export const ownerMenu: MenuItem[] = [
     icon: HandHelping,
     label: "Services",
     children: [
-      { icon: Percent,          label: "Promos",      href: "/owner/promos" },
-      { icon: SlidersHorizontal,label: "Management",  href: "/owner/services" },
-      { icon: Calendar,         label: "Categories",  href: "/owner/categories" },
+      { icon: Layers,            label: "Categories",  href: "/owner/categories" },
+      { icon: SlidersHorizontal, label: "Management",  href: "/owner/services" },
+      { icon: Percent,           label: "Promos",      href: "/owner/promos" },
     ],
   },
   { icon: Calendar,    label: "Bookings",      href: "/owner/booking" },

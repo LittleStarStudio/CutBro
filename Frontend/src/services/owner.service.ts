@@ -84,6 +84,7 @@ export interface ScheduleEntry {
 
 export interface Promo {
   id: number;
+  service_id: number | null;
   name: string;
   original_price: number;
   discount_percent: number;
@@ -144,6 +145,8 @@ export interface ServiceCategory {
   id: number;
   name: string;
   description: string | null;
+  is_active: boolean;
+  services_count: number;
 }
 
 export interface Service {
@@ -154,6 +157,7 @@ export interface Service {
   duration_minutes: number;
   category_id: number | null;
   category?: { id: number; name: string } | null;
+  is_active: boolean;
 }
 
 export interface Barber {
@@ -284,10 +288,10 @@ export const updateAttendance = (
 export const getPromos = () =>
   api.get<{ success: boolean; data: Promo[] }>("/owner/promos").then(unwrap<Promo[]>);
 
-export const createPromo = (data: { name: string; original_price: number; discount_percent: number }) =>
+export const createPromo = (data: { service_id: number; discount_percent: number; is_active?: boolean }) =>
   api.post<{ success: boolean; data: Promo }>("/owner/promos", data);
 
-export const updatePromo = (id: number, data: { name: string; original_price: number; discount_percent: number }) =>
+export const updatePromo = (id: number, data: { service_id: number; discount_percent: number; is_active?: boolean }) =>
   api.put(`/owner/promos/${id}`, data);
 
 export const deletePromo = (id: number) =>
@@ -346,10 +350,10 @@ export const getBarberReport = () =>
 export const getCategories = () =>
   api.get<{ success: boolean; data: ServiceCategory[] }>("/owner/service-categories").then(unwrap<ServiceCategory[]>);
 
-export const createCategory = (data: { name: string; description?: string }) =>
+export const createCategory = (data: { name: string; description?: string; is_active?: boolean }) =>
   api.post<{ success: boolean; data: ServiceCategory }>("/owner/service-categories", data);
 
-export const updateCategory = (id: number, data: { name: string; description?: string }) =>
+export const updateCategory = (id: number, data: { name: string; description?: string; is_active?: boolean }) =>
   api.put(`/owner/service-categories/${id}`, data);
 
 export const deleteCategory = (id: number) =>
@@ -362,10 +366,10 @@ export const deleteCategory = (id: number) =>
 export const getServices = () =>
   api.get<{ success: boolean; data: Service[] }>("/owner/services").then(unwrap<Service[]>);
 
-export const createService = (data: { name: string; description?: string; price: number; duration_minutes: number; category_id?: number }) =>
+export const createService = (data: { name: string; description?: string; price: number; duration_minutes: number; category_id?: number; is_active?: boolean }) =>
   api.post<{ success: boolean; data: Service }>("/owner/services", data);
 
-export const updateService = (id: number, data: { name: string; description?: string; price: number; duration_minutes: number; category_id?: number }) =>
+export const updateService = (id: number, data: { name: string; description?: string; price: number; duration_minutes: number; category_id?: number; is_active?: boolean }) =>
   api.put(`/owner/services/${id}`, data);
 
 export const deleteService = (id: number) =>
