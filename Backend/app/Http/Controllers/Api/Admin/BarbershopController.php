@@ -4,9 +4,10 @@ namespace App\Http\Controllers\Api\Admin;
 
 use App\Http\Controllers\Api\BaseController;
 use App\Models\Barbershop;
-use App\Models\Booking;
 use App\Models\User;
+
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Storage;
 
 class BarbershopController extends BaseController
 {
@@ -30,20 +31,21 @@ class BarbershopController extends BaseController
      */
     public function index(Request $request)
     {
-        $all = Barbershop::with(['barbers'])
+        $all = Barbershop::with(['barbers', 'users.role'])
+            ->withSum(['bookings as total_revenue' => function ($q) {
+                $q->whereIn('status', ['paid', 'done']);
+            }], 'total_price')
             ->orderBy('created_at', 'desc')
             ->get();
 
         $data = $all->map(function ($shop) {
-            // Find the owner user for this barbershop
-            $owner = User::where('barbershop_id', $shop->id)
-                ->whereHas('role', fn ($q) => $q->where('name', 'owner'))
-                ->first();
+            // Owner sudah di-eager load, tidak perlu query baru
+            $owner = $shop->users->first(function ($u) {
+                return $u->role?->name === 'owner';
+            });
 
-            // Monthly revenue: sum of paid/done bookings
-            $revenue = Booking::where('barbershop_id', $shop->id)
-                ->whereIn('status', ['paid', 'done'])
-                ->sum('total_price');
+            // Revenue sudah di-eager load via withSum
+            $revenue = $shop->total_revenue ?? 0;
 
             return [
                 'id'       => $shop->id,
@@ -56,6 +58,9 @@ class BarbershopController extends BaseController
                 'status'   => $shop->status,
                 'revenue'  => $revenue,
                 'rate'     => 0.0,
+                'logo_url' => $shop->logo_url
+                    ? Storage::disk('public')->url($shop->logo_url)
+                    : null,
             ];
         });
 
@@ -87,6 +92,25 @@ class BarbershopController extends BaseController
             'subscription_plan' => $validated['subscription_plan'] ?? $barbershop->subscription_plan,
             'status'            => $validated['status']            ?? $barbershop->status,
         ]);
+
+        // Handle base64 photo upload
+        if ($request->filled('photo_base64')) {
+            $base64    = preg_replace('#^data:image/\w+;base64,#i', '', $request->photo_base64);
+            $imageData = base64_decode($base64);
+
+            if ($imageData === false) {
+                return $this->error('Invalid image data. Please upload a valid image.', 422);
+            }
+
+            if ($barbershop->logo_url) {
+                Storage::disk('public')->delete($barbershop->logo_url);
+            }
+
+            $filename = 'barbershops/' . uniqid() . '.jpg';
+            Storage::disk('public')->put($filename, $imageData);
+            $barbershop->logo_url = $filename;
+            $barbershop->save();
+        }
 
         // Update owner's name in users table
         if (!empty($validated['owner_name'])) {

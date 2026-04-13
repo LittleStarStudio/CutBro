@@ -4,8 +4,11 @@ namespace App\Http\Controllers\Api\Admin;
 use App\Http\Controllers\Api\BaseController;
 use App\Models\Role;
 use App\Models\User;
+
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Storage;
+
 use Carbon\Carbon;
 
 class UserController extends BaseController
@@ -50,6 +53,9 @@ class UserController extends BaseController
                 'last_login' => $u->last_success_login
                     ? Carbon::parse($u->last_success_login)->format('Y-m-d H:i')
                     : null,
+                'avatar_url' => $u->avatar_url
+                    ? Storage::disk('public')->url($u->avatar_url)
+                    : null,
             ]),
             'current_page' => $users->currentPage(),
             'last_page'    => $users->lastPage(),
@@ -72,10 +78,35 @@ class UserController extends BaseController
         if (isset($validated['role'])) {
             $role = Role::where('name', $validated['role'])->firstOrFail();
             $user->role_id = $role->id;
+
+            // Clear barbershop_id if role changed to customer
+            if ($validated['role'] === 'customer') {
+                $user->barbershop_id = null;
+            }
+
             unset($validated['role']);
         }
 
         $user->update($validated);
+
+        // Handle base64 avatar upload
+        if ($request->filled('avatar_base64')) {
+            $base64    = preg_replace('#^data:image/\w+;base64,#i', '', $request->avatar_base64);
+            $imageData = base64_decode($base64);
+
+            if ($imageData === false) {
+                return $this->error('Invalid image data. Please upload a valid image.', 422);
+            }
+
+            if ($user->avatar_url) {
+                Storage::disk('public')->delete($user->avatar_url);
+            }
+
+            $filename = 'avatars/' . uniqid() . '.jpg';
+            Storage::disk('public')->put($filename, $imageData);
+            $user->avatar_url = $filename;
+            $user->save();
+        }
 
         return $this->success([], 'User updated successfully.');
     }

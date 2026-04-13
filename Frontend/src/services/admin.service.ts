@@ -22,6 +22,7 @@ export interface AdminBarbershop {
   status: string;
   revenue: number;
   rate: number;
+  logo_url?: string | null;
 }
 
 export interface BarbershopsResponse {
@@ -35,6 +36,7 @@ export interface UpdateBarbershopPayload {
   city?: string;
   subscription_plan?: string;
   status?: string;
+  photo_base64?: string;
 }
 
 export interface UserStats {
@@ -52,6 +54,7 @@ export interface AdminUser {
   status: string;
   join_date: string;
   last_login: string | null;
+  avatar_url?: string | null;
 }
 
 export interface PaginatedUsers {
@@ -67,6 +70,7 @@ export interface UpdateUserPayload {
   email?: string;
   role?: string;
   status?: string;
+  avatar_base64?: string;
 }
 
 export interface LoginLogStats {

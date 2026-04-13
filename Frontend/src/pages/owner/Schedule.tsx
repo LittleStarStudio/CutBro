@@ -667,7 +667,7 @@ export default function OwnerBarberScheduleMonitor() {
 
   return (
     <DashboardLayout
-      title="Barbers Schedule"
+      title="Attendance"
       subtitle="Real-time barber attendance tracking"
       showSidebar
       menuItems={ownerMenu}

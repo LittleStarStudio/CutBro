@@ -721,8 +721,8 @@ export default function OwnerBarberShifts() {
 
   return (
     <DashboardLayout
-      title="Barbers Assignment"
-      subtitle="Manage barber work schedules"
+      title="Shift Schedule"
+      subtitle="Assign barbers to their work shifts"
       showSidebar
       menuItems={ownerMenu}
       logo={ownerLogo}

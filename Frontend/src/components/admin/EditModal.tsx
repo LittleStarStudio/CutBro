@@ -25,6 +25,7 @@ export interface FormField {
   options?: { value: string; label: string }[];
   rows?: number;
   accept?: string;
+  placeholderIcon?: React.ComponentType<{ size?: number; className?: string }>;
   validation?: (value: any, allData?: Record<string, any>) => string | null;
   helperText?: string;
   showAsterisk?: boolean;
@@ -202,7 +203,10 @@ const EditModal: React.FC<EditModalProps> = ({
               />
             ) : (
               <div className="w-32 h-32 rounded-full bg-[#D4AF37]/10 border-2 border-[#D4AF37]/20 flex items-center justify-center text-[#D4AF37]">
-                <User size={48} />
+                {field.placeholderIcon
+                  ? <field.placeholderIcon size={48} />
+                  : <User size={48} />
+                }
               </div>
             )}
             {!field.disabled && (

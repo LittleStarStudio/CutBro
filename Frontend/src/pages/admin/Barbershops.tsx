@@ -1,6 +1,6 @@
 import DashboardLayout from "@/components/dashboard/DashboardLayout";
 import { useState, useEffect, useMemo } from "react";
-import { Store, Crown, MapPin, Star, Users, TrendingUp } from "lucide-react";
+import { Store, Crown, MapPin, Star, Users, TrendingUp, X } from "lucide-react";
 
 import StatsGrid from "@/components/admin/StatGrid";
 import { superAdminLogo, superAdminMenu } from "@/components/config/Menu";
@@ -60,6 +60,8 @@ export default function Barbershops() {
   const [showEditModal, setShowEditModal] = useState(false);
   const [selectedShop, setSelectedShop] = useState<Barbershop | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [showViewModal, setShowViewModal] = useState(false);
+  const [selectedViewShop, setSelectedViewShop] = useState<Barbershop | null>(null);
 
   /* ================= LOAD ================= */
 
@@ -84,6 +86,7 @@ export default function Barbershops() {
           status:   s.status,
           revenue:  formatRevenue(s.revenue),
           rate:     s.rate,
+          logo_url: s.logo_url ?? null,
         }))
       );
     } catch { /* silent */ }
@@ -113,6 +116,13 @@ export default function Barbershops() {
   /* ================= EDIT FIELDS ================= */
 
   const editFields: FormField[] = [
+    {
+      name: "photo",
+      label: "Shop Photo",
+      type: "image" as const,
+      disabled: false,
+      placeholderIcon: Store,
+    },
     {
       name: "name",
       label: "Barbershop Name",
@@ -154,17 +164,26 @@ export default function Barbershops() {
     setShowEditModal(true);
   };
 
+  const handleViewClick = (shop: Barbershop) => {
+    setSelectedViewShop(shop);
+    setShowViewModal(true);
+  };
+
   const handleSaveEdit = async (data: Record<string, string | number>) => {
     if (!selectedShop) return;
     setIsLoading(true);
     try {
-      await adminService.updateAdminBarbershop(selectedShop.id, {
+      const payload: Record<string, any> = {
         name:              data.name as string,
         owner_name:        data.owner as string,
         city:              data.location as string,
         subscription_plan: (data.plan as string).toLowerCase(),
         status:            data.status as string,
-      });
+      };
+      if (typeof data.photo === "string" && data.photo.startsWith("data:image")) {
+        payload.photo_base64 = data.photo;
+      }
+      await adminService.updateAdminBarbershop(selectedShop.id, payload);
       setShowEditModal(false);
       setSelectedShop(null);
       toast.success("Barbershop Updated", `${selectedShop.name} updated successfully.`);
@@ -285,12 +304,13 @@ export default function Barbershops() {
         {
           key: "actions",
           header: "Actions",
-          headerClassName: "text-left w-[80px]", 
-          className: "text-left",
+          headerClassName: "text-center w-[80px]",
+          className: "text-center",
           render: (shop: Barbershop) => (
-            <div className="flex justify-start w-[80px]">
+            <div className="flex justify-center w-[80px]">
               <ActionButtons
                 actions={[
+                  { type: "view",   onClick: () => handleViewClick(shop)   },
                   { type: "edit",   onClick: () => handleEditClick(shop)   },
                   { type: "delete", onClick: () => handleDeleteClick(shop) },
                 ]}
@@ -299,7 +319,7 @@ export default function Barbershops() {
           ),
         },
       ],
-      [handleEditClick, handleDeleteClick]
+      [handleViewClick, handleEditClick, handleDeleteClick]
     );
 
   /* ================= UI ================= */
@@ -423,6 +443,7 @@ export default function Barbershops() {
                     <ActionButtons
                       align="end"
                       actions={[
+                        { type: "view",   onClick: () => handleViewClick(shop)   },
                         { type: "edit",   onClick: () => handleEditClick(shop)   },
                         { type: "delete", onClick: () => handleDeleteClick(shop) },
                       ]}
@@ -447,7 +468,7 @@ export default function Barbershops() {
         title="Edit Barbershop"
         subtitle="Update barbershop information"
         fields={editFields}
-        initialData={selectedShop ?? {}}
+        initialData={{ ...selectedShop, photo: selectedShop?.logo_url ?? "" }}
         isLoading={isLoading}
       />
 
@@ -458,6 +479,103 @@ export default function Barbershops() {
         onConfirm={handleConfirmDelete}
         onCancel={() => setShowDeleteModal(false)}
       />
+
+      {showViewModal && selectedViewShop && (
+        <ViewBarbershopModal
+          shop={selectedViewShop}
+          onClose={() => { setShowViewModal(false); setSelectedViewShop(null); }}
+        />
+      )}
+
     </DashboardLayout>
+  );
+}
+
+function ViewField({
+  label,
+  value,
+  children,
+}: {
+  label: string;
+  value?: string;
+  children?: React.ReactNode;
+}) {
+  return (
+    <div className="space-y-1.5">
+      <label className="text-xs font-medium text-zinc-400 uppercase tracking-wide">
+        {label}
+      </label>
+      <div className="w-full bg-zinc-800/40 border border-zinc-700/40 rounded-xl px-4 py-2.5 text-sm text-white">
+        {children ?? value}
+      </div>
+    </div>
+  );
+}
+
+function ViewBarbershopModal({
+  shop,
+  onClose,
+}: {
+  shop: Barbershop;
+  onClose: () => void;
+}) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
+      <div className="relative z-10 w-full max-w-md bg-zinc-900 border border-zinc-700/60 rounded-2xl shadow-2xl overflow-hidden max-h-[90vh] overflow-y-auto">
+
+        {/* Header */}
+        <div className="flex items-start justify-between px-6 pt-6 pb-4 border-b border-zinc-800">
+          <div>
+            <h3 className="text-white font-semibold text-lg">Barbershop Detail</h3>
+            <p className="text-zinc-400 text-sm mt-0.5">View barbershop information</p>
+          </div>
+          <button
+            onClick={onClose}
+            className="text-zinc-400 hover:text-white transition-colors p-1 rounded-lg hover:bg-zinc-800"
+          >
+            <X size={18} />
+          </button>
+        </div>
+
+        {/* Body */}
+        <div className="px-6 py-5 space-y-4">
+
+          {/* Shop Photo Preview */}
+          {shop.logo_url ? (
+            <img
+              src={shop.logo_url}
+              alt={shop.name}
+              className="w-full h-44 object-cover rounded-xl border border-zinc-700/40"
+            />
+          ) : (
+            <div className="w-full h-44 bg-zinc-800/60 border border-zinc-700/40 rounded-xl flex flex-col items-center justify-center gap-2">
+              <Store size={40} className="text-zinc-600" />
+              <span className="text-xs text-zinc-500">No photo uploaded</span>
+            </div>
+          )}
+
+          <ViewField label="Barbershop Name" value={shop.name} />
+          <ViewField label="Owner" value={shop.owner} />
+          <ViewField label="Location" value={shop.location} />
+          <ViewField label="Subscription Plan">
+            <Badge text={shop.plan} variant={PLAN_STYLES[shop.plan]} />
+          </ViewField>
+          <div className="grid grid-cols-2 gap-3">
+            <ViewField label="Total Barbers" value={String(shop.barbers)} />
+            <ViewField label="Revenue" value={shop.revenue} />
+          </div>
+          <ViewField label="Rating" value={`⭐ ${shop.rate.toFixed(1)}`} />
+          <ViewField label="Status">
+            <Badge
+              text={capitalizeFirst(shop.status)}
+              variant={STATUS_STYLES[shop.status]}
+              showDot
+              dotColor={STATUS_DOT_COLORS[shop.status]}
+            />
+          </ViewField>
+        </div>
+      </div>
+    </div>
   );
 }

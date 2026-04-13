@@ -106,10 +106,10 @@ function AnimatedRoutes() {
         <Route path="/owner/services" element={<ProtectedRoute allow={["owner"]}><OwnerServices /></ProtectedRoute>} />
         <Route path="/owner/categories" element={<ProtectedRoute allow={["owner"]}><OwnerCategories /></ProtectedRoute>} />
         <Route path="/owner/barbers" element={<ProtectedRoute allow={["owner"]}><OwnerBarbers /></ProtectedRoute>} />
-        <Route path="/owner/shift" element={<ProtectedRoute allow={["owner"]}><OwnerBarberShifts /></ProtectedRoute>} />
-        <Route path="/owner/shift-management" element={<ProtectedRoute allow={["owner"]}><ShiftManagement /></ProtectedRoute>} />
-        <Route path="/owner/schedule" element={<ProtectedRoute allow={["owner"]}><OwnerBarberScheduleMonitor /></ProtectedRoute>} />
-        <Route path="/owner/customers" element={<ProtectedRoute allow={["owner"]}><OwnerCustomers /></ProtectedRoute>} />
+        <Route path="/owner/barbers-work-shifts"    element={<ProtectedRoute allow={["owner"]}><ShiftManagement /></ProtectedRoute>} />
+        <Route path="/owner/barbers-management"     element={<ProtectedRoute allow={["owner"]}><OwnerBarbers /></ProtectedRoute>} />
+        <Route path="/owner/barbers-shift-schedule" element={<ProtectedRoute allow={["owner"]}><OwnerBarberShifts /></ProtectedRoute>} />
+        <Route path="/owner/barbers-attendance"     element={<ProtectedRoute allow={["owner"]}><OwnerBarberScheduleMonitor /></ProtectedRoute>} />
         <Route path="/owner/payment" element={<ProtectedRoute allow={["owner"]}><OwnerPayment /></ProtectedRoute>} />
         <Route path="/owner/promos" element={<ProtectedRoute allow={["owner"]}><OwnerPromos /></ProtectedRoute>} />
         <Route path="/owner/reports" element={<ProtectedRoute allow={["owner"]}><ReportSalary /></ProtectedRoute>} />

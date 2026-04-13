@@ -1,6 +1,6 @@
 import DashboardLayout from "@/components/dashboard/DashboardLayout";
 import { useState, useEffect, useMemo } from "react";
-import { Users, User, Scissors, Store } from "lucide-react";
+import { Users, User, Scissors, Store, X } from "lucide-react";
 
 import StatsGrid from "@/components/admin/StatGrid";
 import { superAdminLogo, superAdminMenu } from "@/components/config/Menu";
@@ -48,6 +48,8 @@ export default function UsersManagement() {
   const [showEditModal, setShowEditModal] = useState(false);
   const [selectedUser, setSelectedUser] = useState<AdminUser | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [showViewModal, setShowViewModal] = useState(false);
+  const [selectedViewUser, setSelectedViewUser] = useState<AdminUser | null>(null);
 
   /* ================= LOAD ================= */
 
@@ -83,6 +85,12 @@ export default function UsersManagement() {
   /* ================= EDIT ================= */
 
   const editFields: FormField[] = [
+    {
+      name: "photo",
+      label: "User Photo",
+      type: "image" as const,
+      disabled: false,
+    },
     {
       name: "name",
       label: "Full Name",
@@ -148,10 +156,14 @@ export default function UsersManagement() {
     },
   ];
 
-
   const handleEditClick = (u: AdminUser) => {
     setSelectedUser(u);
     setShowEditModal(true);
+  };
+
+  const handleViewClick = (u: AdminUser) => {
+    setSelectedViewUser(u);
+    setShowViewModal(true);
   };
 
   const handleSaveEdit = async (data: Record<string, string | number>) => {
@@ -159,12 +171,16 @@ export default function UsersManagement() {
     const target = selectedUser;   // ← tangkap ke const lokal
     setIsLoading(true);
     try {
-      await adminService.updateAdminUser(target.id, {
+      const payload: Record<string, any> = {
         name:   data.name as string,
         email:  data.email as string,
         role:   data.role as string,
         status: data.status as string,
-      });
+      };
+      if (typeof data.photo === "string" && data.photo.startsWith("data:image")) {
+        payload.avatar_base64 = data.photo;
+      }
+      await adminService.updateAdminUser(target.id, payload);
       setShowEditModal(false);
       setSelectedUser(null);
       toast.success("User Updated", `${target.name} updated successfully.`);
@@ -210,9 +226,22 @@ export default function UsersManagement() {
         key: "user",
         header: "User",
         render: (u: AdminUser) => (
-          <div className="min-w-[160px]">
-            <p className="text-white font-semibold truncate max-w-[180px]">{u.name}</p>
-            <p className="text-xs text-muted-foreground">{u.email}</p>
+          <div className="flex items-center gap-3 min-w-[180px]">
+            {u.avatar_url ? (
+              <img
+                src={u.avatar_url}
+                alt={u.name}
+                className="w-9 h-9 rounded-full object-cover border border-zinc-700 flex-shrink-0"
+              />
+            ) : (
+              <div className="w-9 h-9 rounded-full bg-[#D4AF37]/10 border border-[#D4AF37]/20 flex items-center justify-center flex-shrink-0">
+                <User size={14} className="text-[#D4AF37]" />
+              </div>
+            )}
+            <div>
+              <p className="text-white font-semibold truncate max-w-[140px]">{u.name}</p>
+              <p className="text-xs text-zinc-400 truncate max-w-[140px]">{u.email}</p>
+            </div>
           </div>
         ),
       },
@@ -259,6 +288,7 @@ export default function UsersManagement() {
         render: (u: AdminUser) => (
           <ActionButtons
             actions={[
+              { type: "view",   onClick: () => handleViewClick(u)   },
               { type: "edit",   onClick: () => handleEditClick(u)   },
               { type: "delete", onClick: () => handleDeleteClick(u) },
             ]}
@@ -266,7 +296,7 @@ export default function UsersManagement() {
         ),
       },
     ],
-    [handleEditClick, handleDeleteClick]
+    [handleViewClick, handleEditClick, handleDeleteClick]
   );
 
   /* ================= UI ================= */
@@ -359,6 +389,7 @@ export default function UsersManagement() {
                     <ActionButtons
                       align="end"
                       actions={[
+                        { type: "view",   onClick: () => handleViewClick(u)   },
                         { type: "edit",   onClick: () => handleEditClick(u)   },
                         { type: "delete", onClick: () => handleDeleteClick(u) },
                       ]}
@@ -385,7 +416,7 @@ export default function UsersManagement() {
         title="Edit User"
         subtitle="Update user information and permissions"
         fields={editFields}
-        initialData={selectedUser ?? {}}
+        initialData={{ ...selectedUser, photo: selectedUser?.avatar_url ?? "" }}
         isLoading={isLoading}
       />
 
@@ -396,6 +427,102 @@ export default function UsersManagement() {
         onConfirm={handleConfirmDelete}
         onCancel={() => setShowDeleteModal(false)}
       />
+
+      {showViewModal && selectedViewUser && (
+        <ViewUserModal
+          user={selectedViewUser}
+          onClose={() => { setShowViewModal(false); setSelectedViewUser(null); }}
+        />
+      )}
+
     </DashboardLayout>
+  );
+}
+
+function ViewField({
+  label,
+  value,
+  children,
+}: {
+  label: string;
+  value?: string;
+  children?: React.ReactNode;
+}) {
+  return (
+    <div className="space-y-1.5">
+      <label className="text-xs font-medium text-zinc-400 uppercase tracking-wide">
+        {label}
+      </label>
+      <div className="w-full bg-zinc-800/40 border border-zinc-700/40 rounded-xl px-4 py-2.5 text-sm text-white">
+        {children ?? value}
+      </div>
+    </div>
+  );
+}
+
+function ViewUserModal({
+  user,
+  onClose,
+}: {
+  user: AdminUser;
+  onClose: () => void;
+}) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
+      <div className="relative z-10 w-full max-w-md bg-zinc-900 border border-zinc-700/60 rounded-2xl shadow-2xl overflow-hidden">
+
+        {/* Header */}
+        <div className="flex items-start justify-between px-6 pt-6 pb-4 border-b border-zinc-800">
+          <div>
+            <h3 className="text-white font-semibold text-lg">User Detail</h3>
+            <p className="text-zinc-400 text-sm mt-0.5">View user information</p>
+          </div>
+          <button
+            onClick={onClose}
+            className="text-zinc-400 hover:text-white transition-colors p-1 rounded-lg hover:bg-zinc-800"
+          >
+            <X size={18} />
+          </button>
+        </div>
+
+        {/* Body */}
+        <div className="px-6 py-5 space-y-4">
+
+          {/* Avatar + Nama + Email */}
+          <div className="flex items-center gap-4 p-4 bg-zinc-800/40 border border-zinc-700/40 rounded-xl">
+            {user.avatar_url ? (
+              <img
+                src={user.avatar_url}
+                alt={user.name}
+                className="w-14 h-14 rounded-full object-cover border border-zinc-700 flex-shrink-0"
+              />
+            ) : (
+              <div className="w-14 h-14 rounded-full bg-[#D4AF37]/10 border border-[#D4AF37]/20 flex items-center justify-center flex-shrink-0">
+                <User size={24} className="text-[#D4AF37]" />
+              </div>
+            )}
+            <div>
+              <p className="font-semibold text-white">{user.name}</p>
+              <p className="text-xs text-zinc-400">{user.email}</p>
+            </div>
+          </div>
+
+          <ViewField label="Role">
+            <Badge text={capitalizeFirst(user.role)} variant={USER_ROLE_STYLES[user.role]} />
+          </ViewField>
+          <ViewField label="Status">
+            <Badge
+              text={capitalizeFirst(user.status)}
+              variant={USER_STATUS_STYLES[user.status]}
+              showDot
+              dotColor={STATUS_DOT_COLORS[user.status]}
+            />
+          </ViewField>
+          <ViewField label="Join Date" value={user.join_date} />
+          <ViewField label="Last Login" value={user.last_login ?? "-"} />
+        </div>
+      </div>
+    </div>
   );
 }

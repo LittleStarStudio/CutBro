@@ -9,6 +9,7 @@ export type Barbershop = {
   status: string;
   revenue: string;
   rate: number;
+  logo_url?: string | null;
 };
 
 /* ================= NEW TYPES ================= */

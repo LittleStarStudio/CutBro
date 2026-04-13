@@ -140,8 +140,8 @@ export default function ShiftManagement() {
 
   return (
     <DashboardLayout
-      title="Barbers Shift"
-      subtitle="Manage barber work schedules"
+      title="Work Shifts"
+      subtitle="Manage barber work shifts"
       showSidebar
       menuItems={ownerMenu}
       logo={ownerLogo}
