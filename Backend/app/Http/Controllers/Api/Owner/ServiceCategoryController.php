@@ -27,6 +27,7 @@ class ServiceCategoryController extends BaseController
     {
         $data = $request->validate([
             'name' => 'required|string|max:255',
+            'is_active' => 'sometimes|boolean',   
         ]);
 
         $category = $this->service->create($data);
@@ -60,8 +61,25 @@ class ServiceCategoryController extends BaseController
             abort(403, 'Unauthorized access to this category');
         }
 
+        // Guard 1: tidak bisa hapus jika category masih Active
+        if ($serviceCategory->is_active) {
+            return $this->error(
+                'Cannot delete an active category. Please set the category to Inactive first.',
+                422
+            );
+        }
+
+        // Guard 2: tidak bisa hapus jika masih ada services
+        if ($serviceCategory->services()->exists()) {
+            return $this->error(
+                'Cannot delete category that still has services. Please move or delete all services in this category first.',
+                422
+            );
+        }
+
         $this->service->delete($serviceCategory);
 
         return $this->success(null, 'Category deleted');
     }
+
 }

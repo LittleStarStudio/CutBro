@@ -232,7 +232,7 @@ class BookingService
 
         if ($newStatus === Booking::STATUS_DONE) {
             $bookingEndTime = Carbon::parse(
-                $booking->booking_date . ' ' . $booking->end_time,
+                $booking->booking_date->format('Y-m-d') . ' ' . $booking->end_time,
                 'Asia/Jakarta'
             );
 
@@ -442,7 +442,7 @@ class BookingService
             abort(403, 'Owner does not have barbershop');
         }
 
-        $query = Booking::with(['customer', 'service', 'barber'])
+        $query = Booking::with(['customer', 'service', 'barber.user'])
             ->where('barbershop_id', $barbershopId);
 
         // Filter by date

@@ -37,6 +37,7 @@ class ServiceController extends BaseController
             'description' => 'nullable|string',
             'price' => 'required|numeric',
             'duration_minutes' => 'required|integer',
+            'is_active'        => 'sometimes|boolean',
         ]);
 
         $service = $this->serviceService->create($data);
@@ -77,6 +78,22 @@ class ServiceController extends BaseController
 
         if ($service->barbershop_id !== $owner->barbershop_id) {
             abort(403, 'Unauthorized access to this service');
+        }
+
+        // Guard 1: tidak bisa hapus jika service masih Active
+        if ($service->is_active) {
+            return $this->error(
+                'Cannot delete an active service. Please set the service to Inactive first.',
+                422
+            );
+        }
+
+        // Guard 2: tidak bisa hapus jika masih ada promo
+        if ($service->promos()->exists()) {
+            return $this->error(
+                'Cannot delete service that still has promos. Please delete all promos for this service first.',
+                422
+            );
         }
 
         $this->serviceService->delete($service);
