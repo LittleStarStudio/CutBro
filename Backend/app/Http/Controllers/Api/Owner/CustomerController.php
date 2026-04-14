@@ -7,7 +7,6 @@ use App\Models\Booking;
 use App\Models\BarbershopUserBlock;
 use App\Models\User;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\DB;
 
 class CustomerController extends Controller
 {
@@ -15,40 +14,50 @@ class CustomerController extends Controller
     {
         $barbershopId = $request->user()->barbershop_id;
 
-        // Get all customers who have ever booked at this barbershop
-        $customers = Booking::where('barbershop_id', $barbershopId)
-            ->select('customer_id')
+        if (!$barbershopId) {
+            return response()->json(['success' => false, 'message' => 'Owner does not have a barbershop.'], 403);
+        }
+
+        // Ambil semua customer ID yang pernah booking
+        $customerIds = Booking::where('barbershop_id', $barbershopId)
             ->distinct()
-            ->with('customer')
+            ->pluck('customer_id');
+
+        // Preload booking stats sekaligus (bukan per customer)
+        $bookingStats = Booking::where('barbershop_id', $barbershopId)
+            ->whereIn('status', ['paid', 'done'])
+            ->selectRaw('customer_id, COUNT(*) as total_bookings, SUM(total_price) as total_spent')
+            ->groupBy('customer_id')
             ->get()
-            ->pluck('customer')
-            ->filter()
-            ->map(function ($customer) use ($barbershopId) {
-                $bookings = Booking::where('barbershop_id', $barbershopId)
-                    ->where('customer_id', $customer->id)
-                    ->whereIn('status', ['paid', 'done'])
-                    ->get();
+            ->keyBy('customer_id');
 
-                $totalBookings = $bookings->count();
-                $totalSpent    = $bookings->sum('total_price');
-                $lastVisit     = Booking::where('barbershop_id', $barbershopId)
-                    ->where('customer_id', $customer->id)
-                    ->max('booking_date');
+        // Preload last visit sekaligus
+        $lastVisits = Booking::where('barbershop_id', $barbershopId)
+            ->selectRaw('customer_id, MAX(booking_date) as last_visit')
+            ->groupBy('customer_id')
+            ->get()
+            ->keyBy('customer_id');
 
-                // Check ban status for this barbershop
-                $block = BarbershopUserBlock::where('barbershop_id', $barbershopId)
-                    ->where('user_id', $customer->id)
-                    ->whereNull('deleted_at')
-                    ->first();
+        // Preload semua block aktif sekaligus
+        $blocks = BarbershopUserBlock::where('barbershop_id', $barbershopId)
+            ->whereNull('deleted_at')
+            ->get()
+            ->keyBy('user_id');
+
+        $customers = User::whereIn('id', $customerIds)
+            ->get()
+            ->map(function ($customer) use ($bookingStats, $lastVisits, $blocks) {
+                $stats     = $bookingStats->get($customer->id);
+                $block     = $blocks->get($customer->id);
 
                 return [
                     'id'             => $customer->id,
                     'name'           => $customer->name,
                     'email'          => $customer->email,
                     'phone'          => $customer->phone ?? '-',
-                    'total_bookings' => $totalBookings,
-                    'last_visit'     => $lastVisit,
-                    'total_spent'    => (int) $totalSpent,
+                    'total_bookings' => $stats?->total_bookings ?? 0,
+                    'last_visit'     => $lastVisits->get($customer->id)?->last_visit,
+                    'total_spent'    => (int) ($stats?->total_spent ?? 0),
                     'status'         => $block ? 'banned' : 'active',
                     'banned_reason'  => $block?->reason,
                 ];
@@ -67,6 +76,18 @@ class CustomerController extends Controller
             'banned_reason' => 'nullable|string|max:500',
         ]);
 
+        // Verifikasi customer pernah booking di barbershop ini
+        $hasBooking = Booking::where('barbershop_id', $barbershopId)
+            ->where('customer_id', $user->id)
+            ->exists();
+
+        if (!$hasBooking) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Customer has not booked at this barbershop.',
+            ], 403);
+        }
+
         if ($request->status === 'banned') {
             if (!$request->banned_reason) {
                 return response()->json([
@@ -78,7 +99,7 @@ class CustomerController extends Controller
             BarbershopUserBlock::withTrashed()
                 ->updateOrCreate(
                     ['barbershop_id' => $barbershopId, 'user_id' => $user->id],
-                    ['status' => 'banned', 'reason' => $request->banned_reason, 'deleted_at' => null]
+                    ['reason' => $request->banned_reason, 'deleted_at' => null]
                 );
         } else {
             // Unban: soft-delete the block record

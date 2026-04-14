@@ -24,7 +24,6 @@ import { useToast } from "@/components/ui/Toast";
 interface Customer {
   id: number;
   name: string;
-  phone: string;
   email: string;
   totalBookings: number;
   lastVisit: string;
@@ -64,7 +63,6 @@ export default function OwnerCustomers() {
       setCustomers(data.map((c) => ({
         id:            c.id,
         name:          c.name,
-        phone:         c.phone,
         email:         c.email,
         totalBookings: c.total_bookings,
         lastVisit:     c.last_visit ?? "-",
@@ -72,7 +70,9 @@ export default function OwnerCustomers() {
         status:        c.status,
         bannedReason:  c.banned_reason ?? undefined,
       })));
-    }).catch(() => {});
+    }).catch(() => {
+      toast.error("Failed to Load", "Could not fetch customers. Please refresh the page.");
+    });
   };
 
   useEffect(() => { loadCustomers(); }, []);
@@ -85,17 +85,16 @@ export default function OwnerCustomers() {
 
   const filteredCustomers = useMemo(() => {
     return customers.filter((customer) => {
-      const matchesSearch = searchInObject(customer, searchQuery, ["name", "phone", "email"]);
+      const matchesSearch = searchInObject(customer, searchQuery, ["name", "email"]);
       return matchesSearch && filterByField(customer, "status", filterStatus);
     });
   }, [customers, searchQuery, filterStatus]);
 
   const editFields: FormField[] = [
     { name: "name",          label: "Customer Name",   type: "text",     disabled: true, helperText: "Customer information cannot be modified" },
-    { name: "phone",         label: "Phone Number",    type: "text",     disabled: true },
     { name: "email",         label: "Email Address",   type: "email",    disabled: true },
     { name: "totalBookings", label: "Total Bookings",  type: "number",   disabled: true },
-    { name: "lastVisit",     label: "Last Visit",      type: "date",     disabled: true },
+    { name: "lastVisit",     label: "Last Visit",      type: "text",     disabled: true },
     { name: "totalSpent",    label: "Total Spent",     type: "text",     disabled: true },
     {
       name: "status",
@@ -141,8 +140,9 @@ export default function OwnerCustomers() {
       const action = data.status === "banned" ? "banned" : "reactivated";
       toast.success("Customer Updated", `${selectedCustomer.name} has been ${action}.`);
       setSelectedCustomer(null);
-    } catch {
-      toast.error("Update Failed", "Something went wrong. Please try again.");
+    } catch (err: any) {
+      const msg = err?.response?.data?.message ?? "Something went wrong. Please try again.";
+      toast.error("Update Failed", msg);
     } finally {
       setIsLoading(false);
     }
@@ -150,7 +150,9 @@ export default function OwnerCustomers() {
 
   const columns = [
     { key: "name",    header: "Name",    render: (customer: Customer) => <span className="text-white font-semibold">{customer.name}</span> },
-    { key: "contact", header: "Contact", render: (customer: Customer) => <div className="text-[#B8B8B8]"><p>{customer.phone}</p><p className="text-xs">{customer.email}</p></div> },
+    { key: "contact", header: "Email", render: (customer: Customer) => (
+        <span className="text-[#B8B8B8] text-sm">{customer.email}</span>
+    )},
     { key: "totalBookings", header: "Total Bookings", render: (customer: Customer) => <span className="text-[#B8B8B8]">{customer.totalBookings}</span> },
     { key: "lastVisit",     header: "Last Visit",     render: (customer: Customer) => <span className="text-[#B8B8B8]">{customer.lastVisit}</span> },
     { key: "totalSpent",    header: "Total Spent",    render: (customer: Customer) => <span className="text-[#B8B8B8] font-medium">{customer.totalSpent}</span> },
@@ -204,29 +206,32 @@ export default function OwnerCustomers() {
           emptyTitle="No customers found"
           emptyDescription="Try adjusting your filters"
         >
-          <DataTable data={filteredCustomers} columns={columns} />
-          <MobileCardList
-            data={filteredCustomers}
-            renderCard={(customer: Customer) => (
-              <MobileCard
-                title={customer.name}
-                subtitle={<p className="text-xs text-[#B8B8B8]">{customer.phone}</p>}
-                headerRight={
-                  <div>
-                    <Badge text={capitalizeFirst(customer.status)} variant={STATUS_STYLES[customer.status]} showDot dotColor={STATUS_DOT_COLORS[customer.status]} />
-                    {customer.status === "banned" && customer.bannedReason && <p className="text-xs text-red-400 mt-1">{customer.bannedReason}</p>}
-                  </div>
-                }
-                fields={[
-                  { label: "Email",          value: customer.email          },
-                  { label: "Total Bookings", value: customer.totalBookings  },
-                  { label: "Last Visit",     value: customer.lastVisit      },
-                  { label: "Total Spent",    value: customer.totalSpent     },
-                ]}
-                actions={<ActionButtons actions={[{ type: "edit", onClick: () => handleEditClick(customer) }]} />}
-              />
-            )}
-          />
+          <div className="hidden md:block overflow-x-auto">
+            <DataTable data={filteredCustomers} columns={columns} />
+          </div>
+          <div className="block md:hidden">
+            <MobileCardList
+              data={filteredCustomers}
+              renderCard={(customer: Customer) => (
+                <MobileCard
+                  title={customer.name}
+                  subtitle={<p className="text-xs text-[#B8B8B8]">{customer.email}</p>}
+                  headerRight={
+                    <div>
+                      <Badge text={capitalizeFirst(customer.status)} variant={STATUS_STYLES[customer.status]} showDot dotColor={STATUS_DOT_COLORS[customer.status]} />
+                      {customer.status === "banned" && customer.bannedReason && <p className="text-xs text-red-400 mt-1">{customer.bannedReason}</p>}
+                    </div>
+                  }
+                  fields={[
+                    { label: "Total Bookings", value: customer.totalBookings  },
+                    { label: "Last Visit",     value: customer.lastVisit      },
+                    { label: "Total Spent",    value: customer.totalSpent     },
+                  ]}
+                  actions={<ActionButtons actions={[{ type: "edit", onClick: () => handleEditClick(customer) }]} />}
+                />
+              )}
+            />
+          </div>
         </TableCard>
       </div>
 

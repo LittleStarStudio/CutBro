@@ -114,6 +114,8 @@ function AnimatedRoutes() {
         <Route path="/owner/promos" element={<ProtectedRoute allow={["owner"]}><OwnerPromos /></ProtectedRoute>} />
         <Route path="/owner/reports" element={<ProtectedRoute allow={["owner"]}><ReportSalary /></ProtectedRoute>} />
         <Route path="/owner/barber-report" element={<ProtectedRoute allow={["owner"]}><BarberReport /></ProtectedRoute>} />
+        <Route path="/owner/customers" element={<ProtectedRoute allow={["owner"]}><OwnerCustomers /></ProtectedRoute>} />
+
 
         {/* ===== BARBER ===== */}
         <Route path="/barber" element={<ProtectedRoute allow={["barber"]}><BarberDashboard /></ProtectedRoute>} />

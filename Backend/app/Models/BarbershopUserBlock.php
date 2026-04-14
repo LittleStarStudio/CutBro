@@ -12,7 +12,6 @@ class BarbershopUserBlock extends Model
     protected $fillable = [
         'barbershop_id',
         'user_id',
-        'status',
         'reason'
     ];
 
