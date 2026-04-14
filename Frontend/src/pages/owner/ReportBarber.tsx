@@ -1,6 +1,7 @@
 import DashboardLayout from "@/components/dashboard/DashboardLayout";
 import { useState, useEffect, useMemo } from "react";
 import { Scissors, TrendingUp, Award, FileSpreadsheet, Info, Users } from "lucide-react";
+import { useToast } from "@/components/ui/Toast";
 import * as XLSX from "xlsx";
 
 import { ownerLogo, ownerMenu } from "@/components/config/Menu";
@@ -42,6 +43,7 @@ export default function BarberReport() {
   const [filterStatus, setFilterStatus] = useState("all");
 
   const { user, logout } = useAuth();
+  const toast = useToast();
 
   useEffect(() => {
     ownerService.getBarberReport().then((data) => {
@@ -53,7 +55,9 @@ export default function BarberReport() {
         lastActiveDate: r.last_active_date,
         status:         r.status as "Active" | "Inactive",
       })));
-    }).catch(() => {});
+    }).catch(() => {
+      toast.error("Failed to Load", "Could not fetch barber report. Please refresh the page.");
+    });
   }, []);
 
   /* ================= STATS ================= */
@@ -124,7 +128,7 @@ export default function BarberReport() {
       key: "account",
       header: "Account",
       render: (r: BarberReport) => (
-        <span className="text-[#B8B8B8]">@{r.account}</span>
+        <span className="text-[#B8B8B8]">{r.account}</span>
       ),
     },
     {
@@ -248,23 +252,27 @@ export default function BarberReport() {
           emptyDescription="Try adjusting your filters"
         >
           {/* DESKTOP TABLE */}
-          <DataTable data={filteredReports} columns={columns} />
+          <div className="hidden md:block w-full overflow-x-auto">
+            <DataTable data={filteredReports} columns={columns} />
+          </div>
 
           {/* MOBILE CARDS */}
-          <MobileCardList
-            data={filteredReports}
-            renderCard={(r: BarberReport) => (
-              <MobileCard
-                title={r.barberName}
-                subtitle={`@${r.account}`}
-                headerRight={<Badge text={r.status} variant={r.status === "Active" ? "success" : "warning"} />}
-                fields={[
-                  { label: "Join Date",   value: r.joinDate },
-                  { label: "Last Active", value: r.lastActiveDate },
-                ]}
-              />
-            )}
-          />
+          <div className="block md:hidden">
+            <MobileCardList
+              data={filteredReports}
+              renderCard={(r: BarberReport) => (
+                <MobileCard
+                  title={r.barberName}
+                  subtitle={`${r.account}`}
+                  headerRight={<Badge text={r.status} variant={r.status === "Active" ? "success" : "warning"} />}
+                  fields={[
+                    { label: "Join Date",   value: r.joinDate },
+                    { label: "Last Active", value: r.lastActiveDate },
+                  ]}
+                />
+              )}
+            />
+          </div>
         </TableCard>
       </div>
     </DashboardLayout>

@@ -113,13 +113,19 @@ export interface PaymentSetting {
 
 export interface Transaction {
   id: number;
-  invoice_number: string;
+  order_id: string;
+  booking_date: string;
   customer_name: string;
+  customer_email: string;
   service_name: string;
   barber_name: string;
-  price: number;
-  date: string;
-  status: string;
+  payment_method: string | null;
+  gross_amount: number;
+  platform_fee: number;
+  net_amount: number;
+  display_status: string;
+  refund_request_id: number | null;
+  refund_reason: string | null;
 }
 
 export interface RefundRow {
@@ -335,6 +341,14 @@ export const getRefunds = () =>
 
 export const updateRefundStatus = (bookingId: string, status: "refunded" | "failed") =>
   api.patch(`/owner/refunds/${bookingId}/status`, { status });
+
+export const forwardRefundToAdmin = (refundRequestId: number) =>
+  api.post(`/owner/refund-requests/${refundRequestId}/forward`).then(unwrap);
+
+export const ownerRejectRefund = (refundRequestId: number, rejectReason?: string) =>
+  api.post(`/owner/refund-requests/${refundRequestId}/owner-reject`, {
+    reject_reason: rejectReason,
+  }).then(unwrap);
 
 /* ================================================================
    BARBER REPORT

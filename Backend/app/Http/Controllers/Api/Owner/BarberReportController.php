@@ -23,11 +23,11 @@ class BarberReportController extends Controller
 
                 return [
                     'id'               => $barber->id,
-                    'barber_name'      => $barber->name,
+                    'barber_name'      => $barber->user?->name ?? '-',
                     'account'          => $barber->user?->email ?? '-',
                     'join_date'        => $barber->created_at?->format('Y-m-d'),
                     'last_active_date' => $lastBooking ?? $barber->created_at?->format('Y-m-d'),
-                    'status'           => 'Active',
+                    'status' => ($barber->status === 'available') ? 'Active' : 'Inactive',
                 ];
             });
 
