@@ -368,6 +368,7 @@ class TransactionController extends BaseController
     public function getRefundRequests(Request $request): JsonResponse
     {
         $query = RefundRequest::with(['barbershop', 'requester', 'ownerSubscription.plan'])
+            ->where('status', '!=', 'owner_pending')
             ->latest();
 
         if ($status = $request->status) {

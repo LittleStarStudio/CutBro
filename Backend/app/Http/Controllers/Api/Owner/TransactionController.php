@@ -12,34 +12,52 @@ class TransactionController extends Controller
     {
         $barbershopId = $request->user()->barbershop_id;
 
-        $query = Booking::with(['customer', 'barber', 'service'])
+        $bookings = Booking::with(['customer', 'service', 'barber.user', 'payment', 'refundRequest'])
             ->where('barbershop_id', $barbershopId)
-            ->whereIn('status', ['paid', 'done']);
+            ->whereIn('status', ['paid', 'done', 'cancelled', 'no_show'])
+            ->orderBy('booking_date', 'desc')
+            ->get()
+            ->map(function ($b) {
+                $refund = $b->refundRequest;
+                $gross  = (float) $b->total_price;
 
-        // Optional filters
-        if ($request->filled('barber_id')) {
-            $query->where('barber_id', $request->barber_id);
+                $displayStatus = match (true) {
+                    $b->status === 'cancelled' && $refund?->status === 'owner_pending'  => 'refund_requested',
+                    $b->status === 'cancelled' && $refund?->status === 'owner_rejected' => 'refund_rejected',
+                    $b->status === 'cancelled' && $refund?->status === 'pending'        => 'forwarded',
+                    $b->status === 'cancelled' && $refund?->status === 'approved'       => 'refunded',
+                    $b->status === 'cancelled' && $refund?->status === 'rejected'       => 'refund_rejected',
+                    default => $b->status,
+                };
+
+                return [
+                    'id'                => $b->id,
+                    'order_id'          => 'ORD-' . str_pad($b->id, 7, '0', STR_PAD_LEFT),
+                    'booking_date'      => $b->booking_date?->format('Y-m-d'),
+                    'customer_name'     => $b->customer?->name,
+                    'customer_email'    => $b->customer?->email,
+                    'service_name'      => $b->service?->name,
+                    'barber_name'       => $b->barber?->user?->name,
+                    'payment_method'    => $b->payment?->payment_method ?? null,
+                    'gross_amount'      => $gross,
+                    'platform_fee'      => round($gross * 0.02, 2),
+                    'net_amount'        => round($gross * 0.98, 2),
+                    'display_status'    => $displayStatus,
+                    'refund_request_id' => $refund?->id,
+                    'refund_reason'     => $refund?->reason,
+                ];
+            });
+
+        if ($request->filled('status') && $request->status !== 'all') {
+            $bookings = $bookings->filter(fn($b) => $b['display_status'] === $request->status);
         }
         if ($request->filled('date_from')) {
-            $query->whereDate('booking_date', '>=', $request->date_from);
+            $bookings = $bookings->filter(fn($b) => $b['booking_date'] >= $request->date_from);
         }
         if ($request->filled('date_to')) {
-            $query->whereDate('booking_date', '<=', $request->date_to);
+            $bookings = $bookings->filter(fn($b) => $b['booking_date'] <= $request->date_to);
         }
 
-        $transactions = $query->orderBy('booking_date', 'desc')
-            ->get()
-            ->map(fn($b) => [
-                'id'             => $b->id,
-                'invoice_number' => 'INV-' . str_pad($b->id, 5, '0', STR_PAD_LEFT),
-                'customer_name'  => $b->customer?->name,
-                'service_name'   => $b->service?->name,
-                'barber_name'    => $b->barber?->name,
-                'price'          => $b->total_price,
-                'date'           => $b->booking_date?->format('Y-m-d'),
-                'status'         => $b->status,
-            ]);
-
-        return response()->json(['success' => true, 'data' => $transactions]);
+        return response()->json(['success' => true, 'data' => $bookings->values()]);
     }
 }

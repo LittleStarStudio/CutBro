@@ -7,6 +7,8 @@ use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Support\Carbon;
 use DateTimeInterface;
 
+use App\Models\RefundRequest;
+
 class Booking extends Model
 {
     use SoftDeletes;
@@ -67,6 +69,11 @@ class Booking extends Model
     public function payment()
     {
         return $this->hasOne(Payment::class);
+    }
+
+    public function refundRequest()
+    {
+        return $this->hasOne(RefundRequest::class, 'booking_id');
     }
 
 }

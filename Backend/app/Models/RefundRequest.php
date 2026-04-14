@@ -5,12 +5,15 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
+use App\Models\Booking;
+
 class RefundRequest extends Model
 {
     protected $fillable = [
         'transaction_type',
         'owner_subscription_id',
         'payment_id',
+        'booking_id',
         'barbershop_id',
         'requested_by',
         'reason',
@@ -50,4 +53,10 @@ class RefundRequest extends Model
     {
         return $this->belongsTo(User::class, 'processed_by');
     }
+
+    public function booking(): BelongsTo
+    {
+        return $this->belongsTo(Booking::class);
+    }
+
 }

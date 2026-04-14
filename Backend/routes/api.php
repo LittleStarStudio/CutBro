@@ -206,6 +206,8 @@ Route::prefix('owner')->group(function () {
         // Refunds
         Route::get('/refunds', [RefundController::class, 'index']);
         Route::patch('/refunds/{booking}/status', [RefundController::class, 'updateStatus']);
+        Route::post('/refund-requests/{refundRequest}/forward',      [RefundController::class, 'forward']);
+        Route::post('/refund-requests/{refundRequest}/owner-reject', [RefundController::class, 'ownerReject']);
 
         // Barber report
         Route::get('/barbers/report', [BarberReportController::class, 'index']);

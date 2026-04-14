@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api\Owner;
 
 use App\Http\Controllers\Controller;
 use App\Models\Booking;
+use App\Models\RefundRequest;
 use Illuminate\Http\Request;
 
 class RefundController extends Controller
@@ -50,4 +51,44 @@ class RefundController extends Controller
 
         return response()->json(['success' => true, 'message' => 'Refund status updated']);
     }
+
+    public function forward(Request $request, RefundRequest $refundRequest)
+    {
+        $barbershopId = $request->user()->barbershop_id;
+
+        if ($refundRequest->barbershop_id !== $barbershopId) {
+            return response()->json(['success' => false, 'message' => 'Not found.'], 404);
+        }
+
+        if ($refundRequest->status !== 'owner_pending') {
+            return response()->json(['success' => false, 'message' => 'This refund request cannot be forwarded.'], 422);
+        }
+
+        $refundRequest->update(['status' => 'pending']);
+
+        return response()->json(['success' => true, 'message' => 'Refund request forwarded to admin.']);
+    }
+
+    public function ownerReject(Request $request, RefundRequest $refundRequest)
+    {
+        $barbershopId = $request->user()->barbershop_id;
+
+        if ($refundRequest->barbershop_id !== $barbershopId) {
+            return response()->json(['success' => false, 'message' => 'Not found.'], 404);
+        }
+
+        if ($refundRequest->status !== 'owner_pending') {
+            return response()->json(['success' => false, 'message' => 'This refund request cannot be rejected.'], 422);
+        }
+
+        $request->validate(['reject_reason' => 'nullable|string|max:500']);
+
+        $refundRequest->update([
+            'status'     => 'owner_rejected',
+            'admin_note' => $request->reject_reason,
+        ]);
+
+        return response()->json(['success' => true, 'message' => 'Refund request rejected.']);
+    }
+
 }
