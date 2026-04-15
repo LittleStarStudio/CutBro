@@ -66,4 +66,9 @@ class Barbershop extends Model
             ->latest();
     }
 
+    public function photos()
+    {
+        return $this->hasMany(BarbershopPhoto::class)->orderBy('order');
+    }
+
 }

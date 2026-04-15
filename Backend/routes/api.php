@@ -24,6 +24,7 @@ use App\Http\Controllers\Api\Owner\BarberReportController;
 use App\Http\Controllers\Api\Owner\BookingController as OwnerBookingController;
 use App\Http\Controllers\Api\Owner\ListBookingController as OwnerListBookingController;
 use App\Http\Controllers\Api\Owner\SubscriptionController as OwnerSubscriptionController;
+use App\Http\Controllers\Api\Owner\BarbershopPhotoController;
 
 use App\Http\Controllers\Api\Admin\BarbershopController as AdminBarbershopController;
 use App\Http\Controllers\Api\Admin\UserController as AdminUserController;
@@ -32,6 +33,7 @@ use App\Http\Controllers\Api\Admin\SubscriptionPlanController as AdminSubscripti
 use App\Http\Controllers\Api\Admin\TransactionController as AdminTransactionController;
 
 use App\Http\Controllers\Api\Barber\AttendanceController as BarberAttendanceController;
+use App\Http\Controllers\Api\Barber\BarbershopController as BarberWorkPlaceController;
 
 use App\Http\Controllers\Api\Customer\BookingController as CustomerBookingController;
 use App\Http\Controllers\Api\Customer\ListBookingController as CustomerListBookingController;
@@ -171,6 +173,8 @@ Route::prefix('owner')->group(function () {
         // Barbershop profile + operational hours
         Route::get('/barbershop', [BarbershopProfileController::class, 'show']);
         Route::post('/barbershop', [BarbershopProfileController::class, 'update']);
+        Route::post('/barbershop/photos', [BarbershopPhotoController::class, 'store']);
+        Route::delete('/barbershop/photos/{id}', [BarbershopPhotoController::class, 'destroy']);
 
         // Shifts (3 preset: morning, afternoon, evening)
         Route::get('/shifts', [OwnerShiftController::class, 'index']);
@@ -281,6 +285,11 @@ Route::prefix('customer')->group(function () {
 
 // Barber
 Route::prefix('barber')->middleware(['auth:sanctum', 'verified.api', 'token.expired', 'role:barber'])->group(function () {
+    
+    // My Workplace
+    Route::get('/barbershop', [BarberWorkPlaceController::class, 'show']);
+
+    // My Schedule
     Route::get('/attendance/today',    [BarberAttendanceController::class, 'today']);
     Route::post('/attendance/checkin', [BarberAttendanceController::class, 'checkin']);
     Route::post('/attendance/checkout', [BarberAttendanceController::class, 'checkout']); 

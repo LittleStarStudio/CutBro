@@ -2,12 +2,12 @@
 
 namespace App\Http\Controllers\Api\Owner;
 
-use App\Http\Controllers\Controller;
+use App\Http\Controllers\Api\BaseController;
 use App\Models\OperationalHour;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
 
-class BarbershopProfileController extends Controller
+class BarbershopProfileController extends BaseController
 {
     private const DAYS = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
 
@@ -29,6 +29,11 @@ class BarbershopProfileController extends Controller
                 'close_time' => $h->close_time,
             ]);
 
+        $gallery = $barbershop->photos->map(fn($p) => [
+            'id'        => $p->id,
+            'photo_url' => Storage::disk('public')->url($p->photo_url),
+        ]);
+
         $photos = [];
         if ($barbershop->logo_url) {
             $photos[] = Storage::disk('public')->url($barbershop->logo_url);
@@ -45,9 +50,11 @@ class BarbershopProfileController extends Controller
                 'city'              => $barbershop->city,
                 'description'       => $barbershop->description,
                 'photos'            => $photos,
+                'gallery_photos'    => $gallery,
                 'operational_hours' => $hours,
             ],
         ]);
+
     }
 
     public function update(Request $request)
