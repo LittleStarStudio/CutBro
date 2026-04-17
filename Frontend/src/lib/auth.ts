@@ -4,7 +4,8 @@ export type Role = "admin" | "owner" | "barber" | "customer";
 
 export type User = {
   id: number;
-  avatar?: string;
+  avatar?: string;     
+  avatar_url?: string;   
   name: string;
   email: string;
   role: Role;

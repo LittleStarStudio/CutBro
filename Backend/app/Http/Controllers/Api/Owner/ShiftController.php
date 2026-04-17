@@ -10,9 +10,9 @@ class ShiftController extends Controller
 {
     // The 3 canonical shift presets every barbershop should have
     private const PRESETS = [
-        ['name' => 'morning',   'label' => 'Morning',   'start' => '07:00', 'end' => '13:00'],
-        ['name' => 'afternoon', 'label' => 'Afternoon', 'start' => '13:00', 'end' => '19:00'],
-        ['name' => 'evening',   'label' => 'Evening',   'start' => '19:00', 'end' => '22:00'],
+        ['name' => 'morning',   'label' => 'Morning',   'start' => '09:00', 'end' => '13:00'],
+        ['name' => 'afternoon', 'label' => 'Afternoon', 'start' => '13:00', 'end' => '17:00'],
+        ['name' => 'evening',   'label' => 'Evening',   'start' => '17:00', 'end' => '21:00'],
     ];
 
     public function index(Request $request)

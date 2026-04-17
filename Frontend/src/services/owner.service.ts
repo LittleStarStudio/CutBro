@@ -37,6 +37,7 @@ export interface BarbershopProfile {
   phone: string;
   description: string | null;
   photos: string[];
+  gallery_photos: { id: number; photo_url: string }[];
   operational_hours: OperationalHour[];
 }
 
@@ -233,6 +234,21 @@ export const updateBarbershopProfile = (data: FormData) =>
   api.post("/owner/barbershop", data, {
     headers: { "Content-Type": "multipart/form-data" },
   });
+
+export const uploadBarbershopPhoto = (file: File): Promise<{ id: number; photo_url: string }> => {
+  const formData = new FormData();
+  formData.append("photo", file);
+  return api
+    .post<{ success: boolean; data: { id: number; photo_url: string } }>(
+      "/owner/barbershop/photos",
+      formData,
+      { headers: { "Content-Type": "multipart/form-data" } }
+    )
+    .then((res) => res.data.data);
+};
+
+export const deleteBarbershopPhoto = (id: number) =>
+  api.delete(`/owner/barbershop/photos/${id}`);
 
 /* ================================================================
    SHIFTS

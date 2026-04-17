@@ -2,7 +2,7 @@ import DashboardLayout from "@/components/dashboard/DashboardLayout";
 import { useState, useMemo, useEffect, useRef } from "react";
 import {
   Store, Camera, Clock, Trash2, Upload,
-  AlertCircle, Building2, ChevronDown,
+  AlertCircle, Building2, ChevronDown, ImagePlus, X,
 } from "lucide-react";
 
 import { ownerLogo, ownerMenu } from "@/components/config/Menu";
@@ -27,6 +27,7 @@ interface Barbershop {
   phone: string;
   description: string;
   photos: string[];
+  galleryPhotos: { id: number; photo_url: string }[];
   operatingHours: OperatingHour[];
 }
 
@@ -97,7 +98,7 @@ function SectionCard({ title, icon: Icon, children }: {
 
 /* ================= MAIN PAGE ================= */
 const EMPTY_SHOP: Barbershop = {
-  name: "", subscription_plan: "free", city: "", address: "", phone: "", description: "", photos: [], operatingHours: DEFAULT_HOURS,
+  name: "", subscription_plan: "free", city: "", address: "", phone: "", description: "", photos: [], galleryPhotos: [], operatingHours: DEFAULT_HOURS,
 };
 
 export default function OwnerBarbershop() {
@@ -109,6 +110,9 @@ export default function OwnerBarbershop() {
   const [submitted, setSubmitted] = useState(false);
   const [isSaving, setIsSaving]   = useState(false);
   const [newPhotoFile, setNewPhotoFile] = useState<File | null>(null);
+  const [galleryPhotos, setGalleryPhotos] = useState<{ id: number; photo_url: string }[]>([]);
+  const [pendingGalleryUploads, setPendingGalleryUploads] = useState<{ file: File; preview: string }[]>([]);
+  const [pendingGalleryDeletions, setPendingGalleryDeletions] = useState<number[]>([]);
   const [cityOpen, setCityOpen] = useState(false);
   const cityRef = useRef<HTMLDivElement>(null);
 
@@ -122,6 +126,7 @@ export default function OwnerBarbershop() {
         phone:             data.phone,
         description:       data.description ?? "",
         photos:            data.photos ?? [],
+        galleryPhotos:     data.gallery_photos ?? [],
         operatingHours: data.operational_hours?.length
           ? DAYS.map((day) => {
               const h = data.operational_hours.find((oh) => oh.day === day);
@@ -133,6 +138,7 @@ export default function OwnerBarbershop() {
       };
       setShop(mapped);
       setSavedShop(mapped);
+      setGalleryPhotos(data.gallery_photos ?? []);
     }).catch(() => {
       toast.error("Load Failed", "Failed to load barbershop data. Please refresh the page.");
     });
@@ -149,8 +155,11 @@ export default function OwnerBarbershop() {
   }, []);
 
   const hasChanges = useMemo(
-    () => JSON.stringify(shop) !== JSON.stringify(savedShop),
-    [shop, savedShop]
+    () =>
+      JSON.stringify(shop) !== JSON.stringify(savedShop) ||
+      pendingGalleryUploads.length > 0 ||
+      pendingGalleryDeletions.length > 0,
+    [shop, savedShop, pendingGalleryUploads, pendingGalleryDeletions]
   );
 
   const errors = useMemo(() => {
@@ -190,6 +199,38 @@ export default function OwnerBarbershop() {
     }
     setNewPhotoFile(null);
     setShop((prev) => ({ ...prev, photos: [] }));
+  };
+
+  const handleAddGalleryPhoto = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (file.size > 2 * 1024 * 1024) {
+      toast.error("File Too Large", "Photo must be smaller than 2MB.");
+      e.target.value = "";
+      return;
+    }
+    const displayCount =
+      galleryPhotos.filter((p) => !pendingGalleryDeletions.includes(p.id)).length +
+      pendingGalleryUploads.length;
+    if (displayCount >= 4) {
+      toast.error("Limit Reached", "Maximum 4 photos allowed.");
+      e.target.value = "";
+      return;
+    }
+    setPendingGalleryUploads((prev) => [
+      ...prev,
+      { file, preview: URL.createObjectURL(file) },
+    ]);
+    e.target.value = "";
+  };
+
+  const handleDeleteGalleryPhoto = (id: number) => {
+    setPendingGalleryDeletions((prev) => [...prev, id]);
+  };
+
+  const handleRemovePendingPhoto = (preview: string) => {
+    URL.revokeObjectURL(preview);
+    setPendingGalleryUploads((prev) => prev.filter((p) => p.preview !== preview));
   };
 
   const updateHour = (index: number, field: keyof OperatingHour, value: any) => {
@@ -238,6 +279,25 @@ export default function OwnerBarbershop() {
         formData.append(`operational_hours[${i}][close_time]`, h.closeTime);
       });
       await ownerService.updateBarbershopProfile(formData);
+
+      // Process gallery uploads
+      const uploaded: { id: number; photo_url: string }[] = [];
+      for (const { file, preview } of pendingGalleryUploads) {
+        const newPhoto = await ownerService.uploadBarbershopPhoto(file);
+        uploaded.push(newPhoto);
+        URL.revokeObjectURL(preview);
+      }
+      // Process gallery deletions
+      for (const id of pendingGalleryDeletions) {
+        await ownerService.deleteBarbershopPhoto(id);
+      }
+      setGalleryPhotos((prev) => [
+        ...prev.filter((p) => !pendingGalleryDeletions.includes(p.id)),
+        ...uploaded,
+      ]);
+      setPendingGalleryUploads([]);
+      setPendingGalleryDeletions([]);
+
       setSavedShop(shop);
       setNewPhotoFile(null);
       toast.success("Changes Saved!", "Barbershop info updated successfully.");
@@ -295,7 +355,79 @@ export default function OwnerBarbershop() {
               )}
               <p className="text-xs text-zinc-500">Recommended: 1280×720px (16:9) • JPG, PNG • Max 2MB</p>
             </div>
+
+            {/* Barbershop Photos */}
+            <div className="border-t border-zinc-800 pt-4 space-y-3">
+              <p className="text-sm font-semibold text-zinc-300">
+                Barbershop Photos{" "}
+                <span className="text-xs font-normal text-zinc-500">
+                  ({galleryPhotos.filter((p) => !pendingGalleryDeletions.includes(p.id)).length + pendingGalleryUploads.length}/4)
+                </span>
+              </p>
+
+              <div className="grid grid-cols-2 gap-3">
+                {/* Saved photos — tampil normal, X = mark for deletion */}
+                {galleryPhotos
+                  .filter((p) => !pendingGalleryDeletions.includes(p.id))
+                  .map((photo) => (
+                    <div
+                      key={photo.id}
+                      className="relative group rounded-xl overflow-hidden border border-zinc-700 aspect-video bg-zinc-800"
+                    >
+                      <img src={photo.photo_url} alt="Barbershop" className="w-full h-full object-cover" />
+                      <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                        <button
+                          type="button"
+                          onClick={() => handleDeleteGalleryPhoto(photo.id)}
+                          className="w-8 h-8 bg-red-500 hover:bg-red-600 rounded-full flex items-center justify-center transition-colors"
+                        >
+                          <X size={14} className="text-white" />
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+
+                {/* Pending uploads — preview lokal, border kuning, X = batal */}
+                {pendingGalleryUploads.map(({ preview }) => (
+                  <div
+                    key={preview}
+                    className="relative group rounded-xl overflow-hidden border-2 border-[#D4AF37]/50 aspect-video bg-zinc-800"
+                  >
+                    <img src={preview} alt="Pending" className="w-full h-full object-cover" />
+                    <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                      <button
+                        type="button"
+                        onClick={() => handleRemovePendingPhoto(preview)}
+                        className="w-8 h-8 bg-red-500 hover:bg-red-600 rounded-full flex items-center justify-center transition-colors"
+                      >
+                        <X size={14} className="text-white" />
+                      </button>
+                    </div>
+                  </div>
+                ))}
+
+                {/* Tombol Add — sembunyikan jika sudah 4 */}
+                {galleryPhotos.filter((p) => !pendingGalleryDeletions.includes(p.id)).length +
+                  pendingGalleryUploads.length < 4 && (
+                  <label className="flex flex-col items-center justify-center rounded-xl border-2 border-dashed border-zinc-700 hover:border-[#D4AF37]/60 hover:bg-[#D4AF37]/5 aspect-video cursor-pointer transition-all">
+                    <ImagePlus size={22} className="text-zinc-500" />
+                    <span className="text-xs text-zinc-500 mt-1 font-medium">Add Photo</span>
+                    <input
+                      type="file"
+                      accept="image/*"
+                      className="hidden"
+                      onChange={handleAddGalleryPhoto}
+                    />
+                  </label>
+                )}
+              </div>
+
+              <p className="text-xs text-zinc-500">
+                Upload up to 4 photos. Max 2MB each.
+              </p>
+            </div>
           </SectionCard>
+
 
           {/* RIGHT — Basic Info (merged with Address) */}
           <SectionCard title="Basic Information" icon={Store}>
@@ -364,7 +496,6 @@ export default function OwnerBarbershop() {
                 <label className="block text-sm font-semibold text-zinc-300 mb-1.5">Description <span className="text-zinc-500 font-normal">(Optional)</span></label>
                 <textarea rows={2} className="w-full p-3 rounded-lg bg-zinc-800 border-2 border-zinc-700 text-white placeholder-zinc-500 focus:border-[#D4AF37] focus:outline-none transition-colors resize-none" value={shop.description} onChange={(e) => setShop((p) => ({ ...p, description: e.target.value }))} placeholder="Brief description of your barbershop..." />
               </div>
-
             </div>
           </SectionCard>
         </div>
@@ -439,6 +570,9 @@ export default function OwnerBarbershop() {
               if (shop.photos[0]?.startsWith("blob:")) {
                 URL.revokeObjectURL(shop.photos[0]);
               }
+              pendingGalleryUploads.forEach((p) => URL.revokeObjectURL(p.preview));
+              setPendingGalleryUploads([]);
+              setPendingGalleryDeletions([]);
               setShop(savedShop);
               setSubmitted(false);
               setNewPhotoFile(null);

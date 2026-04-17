@@ -132,14 +132,29 @@ export async function registerCustomer(payload: RegisterCustomerPayload): Promis
 }
 
 export async function getMe(): Promise<User> {
-  const { data } = await api.get<{ success: boolean; data: User }>("/auth/me");
-  const user: User = {
-    ...data.data,
-    role: normalizeRole(data.data.role as string),
+  const { data } = await api.get<{ success: boolean; data: any }>("/auth/me");
+  const raw = data.data;
+  return {
+    ...raw,
+    avatar: raw.avatar_url ?? undefined,
   };
-  localStorage.setItem("user", JSON.stringify(user));
-  return user;
 }
+
+export const updateProfile = (data: { name?: string; password?: string }) =>
+  api.patch("/auth/profile", data).then((res) => res.data.data.user as User);
+
+export const uploadAvatar = (file: File): Promise<{ avatar_url: string }> => {
+  const fd = new FormData();
+  fd.append("avatar", file);
+  return api
+    .post<{ success: boolean; data: { avatar_url: string } }>(
+      "/auth/profile/avatar",
+      fd,
+      { headers: { "Content-Type": "multipart/form-data" } }
+    )
+    .then((res) => res.data.data);
+};
+
 
 export async function logout(): Promise<void> {
   const location = localStorage.getItem("cutbro_location") ?? "-";

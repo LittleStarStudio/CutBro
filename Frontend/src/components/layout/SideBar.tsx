@@ -24,7 +24,8 @@ interface SidebarProps {
   menuItems: MenuItem[];
   logo?: {
     icon: LucideIcon;
-    text: string; // UserRole: "SuperAdmin" | "Owner" | "Barber" | "Customer"
+    text: string;
+    imageUrl?: string;  
   };
   onLogout?: () => void;
 }
@@ -180,7 +181,11 @@ export default function Sidebar({
               {logo && (
                 <>
                   <div className="w-10 h-10 shrink-0 rounded-xl bg-gradient-to-br from-amber-500 via-amber-600 to-yellow-700 flex items-center justify-center shadow-lg">
-                    <logo.icon className="w-5 h-5 text-white" />
+                    {logo.imageUrl ? (
+                      <img src={logo.imageUrl} alt="logo" className="w-6 h-6 object-contain" />
+                    ) : (
+                      <logo.icon size={20} className="text-white" />
+                    )}
                   </div>
                   <div className="sb-label flex flex-col">
                     <span className="text-[15px] font-bold leading-tight">

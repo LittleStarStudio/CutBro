@@ -31,6 +31,7 @@ use App\Http\Controllers\Api\Admin\UserController as AdminUserController;
 use App\Http\Controllers\Api\Admin\LoginLogController as AdminLoginLogController;
 use App\Http\Controllers\Api\Admin\SubscriptionPlanController as AdminSubscriptionPlanController;
 use App\Http\Controllers\Api\Admin\TransactionController as AdminTransactionController;
+use App\Http\Controllers\Api\Admin\AppSettingController;
 
 use App\Http\Controllers\Api\Barber\AttendanceController as BarberAttendanceController;
 use App\Http\Controllers\Api\Barber\BarbershopController as BarberWorkPlaceController;
@@ -40,6 +41,9 @@ use App\Http\Controllers\Api\Customer\ListBookingController as CustomerListBooki
 
 use App\Models\User;
 use Illuminate\Http\Request;
+
+// Public — tidak perlu auth
+Route::get('/app-settings/public', [AppSettingController::class, 'index']);
 
 // Users Verification (API)
 /**
@@ -118,6 +122,7 @@ Route::prefix('auth')->group(function () {
         Route::post('/set-password', [AuthController::class,'setPassword']);
 
         Route::patch('/profile', [ProfileController::class,'update']);
+        Route::post('/profile/avatar', [ProfileController::class, 'avatar']);
 
         Route::post('/block-user', [AuthController::class,'blockUser']);
         Route::patch('/users/{id}/status', [AuthController::class,'updateStatus']);
@@ -260,6 +265,10 @@ Route::prefix('admin')->middleware(['auth:sanctum', 'verified.api', 'token.expir
     Route::patch('/refund-requests/{refundRequest}/approve', [AdminTransactionController::class, 'approveRefund']);
     Route::patch('/refund-requests/{refundRequest}/reject', [AdminTransactionController::class, 'rejectRefund']);
 
+    // App Settings
+    Route::get('/app-settings', [AppSettingController::class, 'index']);
+    Route::patch('/app-settings', [AppSettingController::class, 'update']);
+    Route::post('/app-settings/logo', [AppSettingController::class, 'logo']);
 
 });
 
@@ -293,6 +302,7 @@ Route::prefix('barber')->middleware(['auth:sanctum', 'verified.api', 'token.expi
     Route::get('/attendance/today',    [BarberAttendanceController::class, 'today']);
     Route::post('/attendance/checkin', [BarberAttendanceController::class, 'checkin']);
     Route::post('/attendance/checkout', [BarberAttendanceController::class, 'checkout']); 
+    Route::get('/schedule/weekly', [BarberAttendanceController::class, 'weeklySchedule']);
 });
 
 

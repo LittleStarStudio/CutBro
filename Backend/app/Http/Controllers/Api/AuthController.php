@@ -847,15 +847,19 @@ class AuthController extends BaseController
     private function sanitizeUser(User $user): array
     {
         return [
-            'id' => $user->id,
-            'name' => $user->name,
-            'email' => $user->email,
-            'role' => $user->role->name,
+            'id'            => $user->id,
+            'name'          => $user->name,
+            'email'         => $user->email,
+            'role'          => $user->role->name,
             'barbershop_id' => $user->barbershop_id,
-            'status' => $user->status,
-            'created_at' => $user->created_at,
-            'updated_at' => $user->updated_at,
+            'status'        => $user->status,
+            'avatar_url'    => $user->avatar_url
+                                ? \Illuminate\Support\Facades\Storage::disk('public')->url($user->avatar_url)
+                                : null,
+            'created_at'    => $user->created_at,
+            'updated_at'    => $user->updated_at,
         ];
+
     }
 
     /**

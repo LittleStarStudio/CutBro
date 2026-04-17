@@ -6,8 +6,11 @@ import {
 } from "lucide-react";
 import { useState, useEffect, useRef } from "react";
 
+import { useAppSettings } from "@/components/context/AppSettingsContext";
 import ProfileModal, { type Profile } from "@/components/profile/ProfileModal";
 import SettingsModal from "@/components/dashboard/SettingsModal";
+import { useAuth } from "@/components/context/AuthContext";
+import { updateProfile, uploadAvatar } from "@/services/auth.service";
 import type { Role } from "@/lib/auth";
 
 /* ================= TYPES ================= */
@@ -46,16 +49,23 @@ const PROFILE_MENU_ITEMS = [
 
 /* ================= SMALL COMPONENTS ================= */
 
-const Logo = ({ isLoggedIn }: { isLoggedIn: boolean }) => (
-  <Link to={isLoggedIn ? "/customer" : "/"} className="flex items-center gap-2 group">
-    <div className="w-9 h-9 rounded-lg bg-amber-500 flex items-center justify-center">
-      <Scissors className="w-5 h-5 text-neutral-900" />
-    </div>
-    <span className="text-xl font-bold text-amber-50">
-      Cut<span className="font-extrabold">Bro</span>
-    </span>
-  </Link>
-);
+const Logo = ({ isLoggedIn }: { isLoggedIn: boolean }) => {
+  const { appLogoUrl, appName } = useAppSettings();
+  return (
+    <Link to={isLoggedIn ? "/customer" : "/"} className="flex items-center gap-2 group">
+      <div className="w-9 h-9 rounded-lg bg-amber-500 flex items-center justify-center overflow-hidden">
+        {appLogoUrl ? (
+          <img src={appLogoUrl} alt={appName} className="w-7 h-7 object-contain" />
+        ) : (
+          <Scissors className="w-5 h-5 text-neutral-900" />
+        )}
+      </div>
+      <span className="text-xl font-bold text-amber-50">
+        Cut<span className="font-extrabold">Bro</span>
+      </span>
+    </Link>
+  );
+};
 
 const NavLinkItem = ({
   label, href, onClick, className, isLoggedIn = false,
@@ -192,6 +202,8 @@ export default function NavbarLayout({ user, notificationCount = 0, onLogout }: 
 
   const profileRef = useRef<HTMLDivElement>(null);
   const navigate   = useNavigate();
+  const { user: authUser, setUser } = useAuth();
+  const displayUser = authUser ?? user;
 
   useEffect(() => {
     const handler = (e: MouseEvent) => {
@@ -218,8 +230,29 @@ export default function NavbarLayout({ user, notificationCount = 0, onLogout }: 
     setTimeout(() => setShowSettingsModal(true), 10);
   };
 
-  const profileData: Profile | undefined = user
-    ? { name: user.name, email: user.email, photoPreview: user.avatar ?? "" }
+  const handleProfileSave = async (updated: Profile): Promise<void> => {
+    let newAvatarUrl: string | undefined;
+    if (updated.photoFile) {
+      const result = await uploadAvatar(updated.photoFile);
+      newAvatarUrl = result.avatar_url;
+    }
+    if (updated.name !== displayUser?.name || updated.password) {
+      await updateProfile({
+        name: updated.name,
+        ...(updated.password ? { password: updated.password } : {}),
+      });
+    }
+    if (authUser) {
+      setUser({
+        ...authUser,
+        name: updated.name,
+        ...(newAvatarUrl ? { avatar: newAvatarUrl, avatar_url: newAvatarUrl } : {}),
+      });
+    }
+  };
+
+  const profileData: Profile | undefined = displayUser
+    ? { name: displayUser.name, email: displayUser.email, photoPreview: displayUser.avatar ?? "" }
     : undefined;
 
   const mobileNavLinks = user ? NAV_LINKS_AUTH : NAV_LINKS_GUEST;
@@ -307,7 +340,7 @@ export default function NavbarLayout({ user, notificationCount = 0, onLogout }: 
           open={showProfileModal}
           onClose={() => setShowProfileModal(false)}
           data={profileData}
-          onSave={(updated) => { console.log("Profile updated:", updated); setShowProfileModal(false); }}
+          onSave={handleProfileSave}
         />
       )}
 

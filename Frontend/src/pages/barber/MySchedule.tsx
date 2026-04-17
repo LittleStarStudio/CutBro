@@ -5,11 +5,11 @@ import {
   AlertTriangle, Clock, Home,
 } from "lucide-react";
 import * as barberService from "@/services/barber.service";
-import type { TodayAttendance } from "@/services/barber.service";
+import type { TodayAttendance, WeeklySchedule } from "@/services/barber.service";
 import { useToast } from "@/components/ui/Toast";
 
+import { useAuth } from "@/components/context/AuthContext";
 import { barberLogo, barberMenu } from "@/components/config/Menu";
-import { logout, getUser } from "@/lib/auth";
 
 /* ================= TYPES ================= */
 type ShiftType   = "morning" | "afternoon" | "evening";
@@ -190,11 +190,13 @@ function PanelButton({ label, icon, onClick, variant, disabled }: PanelButtonPro
 export default function BarberSchedulePage() {
   const [shifts, setShifts]               = useState<BarberShift[]>([]);
   const [clock, setClock]                 = useState(getNowTime());
-  const currentUser = getUser();
+  const { user: currentUser, logout }     = useAuth();
 
   const toast = useToast();
   const [todayAttendance, setTodayAttendance] = useState<TodayAttendance | null>(null);
   const [isSubmitting, setIsSubmitting]       = useState(false);
+  const [weeklySchedule, setWeeklySchedule] = useState<WeeklySchedule | null>(null);
+  const [isLoadingSchedule, setIsLoadingSchedule] = useState(true);
 
   const fetchAttendance = () => {
     barberService.getTodayAttendance()
@@ -206,8 +208,50 @@ export default function BarberSchedulePage() {
 
   useEffect(() => { fetchAttendance(); }, []);
 
+  useEffect(() => { 
+    barberService.getWeeklySchedule()
+      .then((data) => {
+        setWeeklySchedule(data);
+        setIsLoadingSchedule(false);
+      })
+      .catch(() => {
+        setIsLoadingSchedule(false);
+      });
+  }, []);
+
   /* ── Generate & clock tick ───────────────────────────────── */
-  useEffect(() => { setShifts(generateWeeklyShifts()); }, []);
+  useEffect(() => { 
+    const generated = generateWeeklyShifts();
+    
+    if (weeklySchedule) {
+      generated.forEach((shift, i) => {
+        const dayName = DAYS_EN[shift.date.getDay()];
+        const apiData = weeklySchedule[dayName];
+        if (apiData && apiData.shift_name) {
+          generated[i] = {
+            ...generated[i],
+            shiftType: apiData.shift_name.toLowerCase() as ShiftType,
+            startTime: apiData.start_time || generated[i].startTime,
+            endTime:   apiData.end_time   || generated[i].endTime,
+            log: {
+              clockIn:  apiData.actual_checkin  ?? null,
+              clockOut: apiData.actual_checkout ?? null,
+            },
+          };
+        } else {
+          generated[i] = {
+            ...generated[i],
+            shiftType: null,
+            startTime: "-",
+            endTime:   "-",
+            status:    "off",
+          };
+        }
+      });
+    }
+    
+    setShifts(generated); 
+  }, [weeklySchedule]);
 
   useEffect(() => {
     const t = setInterval(() => {
@@ -399,7 +443,7 @@ export default function BarberSchedulePage() {
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-white/8">
-                  {["Date","Day","Status","Shift","Clock In","Clock Out"].map((h) => (
+                  {["Date","Day","Shift","Clock In","Clock Out"].map((h) => (
                     <th key={h} className="px-4 py-3 text-left text-[11px] font-semibold text-zinc-500 uppercase tracking-wider whitespace-nowrap">
                       {h}
                     </th>
@@ -423,18 +467,16 @@ export default function BarberSchedulePage() {
                           {DAYS_EN[shift.date.getDay()]}
                         </span>
                       </td>
-                      <td className="px-4 py-3 whitespace-nowrap">
-                        <span className={`
-                          text-xs font-semibold px-2 py-0.5 rounded
-                          ${shift.shiftType === null
-                            ? "bg-zinc-700/50 text-zinc-400"
-                            : "bg-blue-500/20 text-blue-300"}
-                        `}>
-                          {shift.shiftType ? "WFO" : "OFF"}
-                        </span>
-                      </td>
                       <td className="px-4 py-3">
-                        <span className="text-sm text-zinc-300 whitespace-nowrap">{shiftLbl}</span>
+                        {isLoadingSchedule ? (
+                          <span className="text-sm text-zinc-500">Loading...</span>
+                        ) : shift.shiftType ? (
+                          <span className="text-sm text-zinc-300 whitespace-nowrap">
+                            {shift.shiftType.charAt(0).toUpperCase() + shift.shiftType.slice(1)} Shift ({shift.startTime} - {shift.endTime})
+                          </span>
+                        ) : (
+                          <span className="text-sm text-zinc-500 italic">You don't have shift this day</span>
+                        )}
                       </td>
                       <td className="px-4 py-3 whitespace-nowrap">
                         {(() => {
@@ -477,11 +519,16 @@ export default function BarberSchedulePage() {
                       </span>
                       <span className="text-zinc-500 text-xs ml-2 font-mono">{formatDDMMYYYY(shift.date)}</span>
                     </div>
-                    <span className={`text-xs font-semibold px-2 py-0.5 rounded ${shift.shiftType ? "bg-blue-500/20 text-blue-300" : "bg-zinc-700/50 text-zinc-400"}`}>
-                      {shift.shiftType ? "WFO" : "OFF"}
-                    </span>
                   </div>
-                  <p className="text-xs text-zinc-400 mb-2">{shiftLbl}</p>
+                  {isLoadingSchedule ? (
+                    <p className="text-xs text-zinc-500">Loading...</p>
+                  ) : shift.shiftType ? (
+                    <p className="text-xs text-zinc-400 mb-2">
+                      {shift.shiftType.charAt(0).toUpperCase() + shift.shiftType.slice(1)} Shift ({shift.startTime} - {shift.endTime})
+                    </p>
+                  ) : (
+                    <p className="text-xs text-zinc-500 italic mb-2">You don't have shift this day</p>
+                  )}
                   <div className="flex gap-4 text-xs">
                     <div>
                       <p className="text-zinc-500">Clock In</p>

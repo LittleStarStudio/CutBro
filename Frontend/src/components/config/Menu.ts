@@ -31,14 +31,7 @@ export const superAdminMenu: MenuItem[] = [
   { icon: Users,           label: "Users",       href: "/admin/users" },
   { icon: ReceiptIcon,     label: "Transaction", href: "/admin/transaction" },
   { icon: CalendarSync,    label: "Subscribe",   href: "/admin/subscribe" },
-  {
-    icon: Users,
-    label: "Activity",
-    children: [
-      { icon: ArrowLeftRight, label: "Login Logs",      href: "/admin/login-logs" },
-      { icon: Users,          label: "Users Activity",  href: "/admin/users-activity" },
-    ],
-  },
+  { icon: ArrowLeftRight,  label: "Login Logs",  href: "/admin/login-logs" },
   {
     icon: BarChart3,
     label: "Reports",

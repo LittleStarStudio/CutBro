@@ -3,7 +3,7 @@ import { useMemo } from "react";
 import { Scissors, Users, Calendar, Store } from "lucide-react";
 
 import { barberLogo, barberMenu } from "@/components/config/Menu";
-import { logout, getUser } from "@/lib/auth";
+import { useAuth } from "@/components/context/AuthContext";
 
 import Badge from "@/components/admin/Badge";
 import StatsGrid from "@/components/admin/StatGrid";
@@ -105,7 +105,7 @@ const CustomTooltip = ({ active, payload, label }: any) => {
 
 /* ================= COMPONENT ================= */
 export default function BarberDashboard() {
-  const currentUser = getUser();
+  const { user: currentUser, logout } = useAuth();
 
   /* ================= STATS ================= */
   const stats = useMemo(() => {

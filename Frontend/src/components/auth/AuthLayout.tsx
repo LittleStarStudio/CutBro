@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import { ArrowLeft, Scissors } from "lucide-react";
 import type { Role } from "@/lib/auth";
+import { useAppSettings } from "@/components/context/AppSettingsContext";
 
 interface AuthLayoutProps {
   children: ReactNode;
@@ -29,6 +30,8 @@ export default function AuthLayout({
 }: AuthLayoutProps) {
   const hasRole = !!selectedRole;
 
+  const { appLogoUrl } = useAppSettings();
+
   return (
     <div className="min-h-screen bg-neutral-950 flex items-center justify-center px-4">
       <div className="max-w-md w-full">
@@ -46,8 +49,12 @@ export default function AuthLayout({
 
         {/* ================= HEADER ================= */}
         <div className="text-center mb-8">
-          <div className="w-12 h-12 mx-auto mb-4 rounded-xl bg-amber-500 flex items-center justify-center">
-            <Scissors className="w-6 h-6 text-white" />
+          <div className="w-12 h-12 mx-auto mb-4 rounded-xl bg-amber-500 flex items-center justify-center overflow-hidden">
+            {appLogoUrl ? (
+              <img src={appLogoUrl} alt="logo" className="w-9 h-9 object-contain" />
+            ) : (
+              <Scissors className="w-6 h-6 text-white" />
+            )}
           </div>
 
           <h2 className="text-3xl font-bold text-white">{title}</h2>

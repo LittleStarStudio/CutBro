@@ -2,8 +2,8 @@ import DashboardLayout from "@/components/dashboard/DashboardLayout";
 import { useState, useEffect, useMemo } from "react";
 import { Calendar, Clock, CheckCircle, User } from "lucide-react";
 
+import { useAuth } from "@/components/context/AuthContext";
 import { barberLogo, barberMenu } from "@/components/config/Menu";
-import { logout, getUser } from "@/lib/auth";
 
 import {
   searchInObject,
@@ -106,10 +106,10 @@ function MobileTaskCard({ task, index, onDone }: { task: ScheduleTask; index: nu
 export default function BarberSchedule() {
   const toast = useToast();
 
-  const [schedule, setSchedule] = useState<ScheduleTask[]>([]);
-  const [searchQuery, setSearchQuery] = useState("");
+  const [schedule, setSchedule]         = useState<ScheduleTask[]>([]);
+  const [searchQuery, setSearchQuery]   = useState("");
 
-  const currentUser = getUser();
+  const { user: currentUser, logout }   = useAuth();
 
   useEffect(() => {
     setSchedule(DUMMY_SCHEDULE);

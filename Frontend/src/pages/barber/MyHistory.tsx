@@ -2,8 +2,8 @@ import DashboardLayout from "@/components/dashboard/DashboardLayout";
 import { useState, useEffect, useMemo } from "react";
 import { Activity, CheckCircle, XCircle } from "lucide-react";
 
+import { useAuth } from "@/components/context/AuthContext";
 import { barberLogo, barberMenu } from "@/components/config/Menu";
-import { logout, getUser } from "@/lib/auth";
 
 import { searchInObject } from "@/lib/utils/AdminUtils";
 
@@ -86,11 +86,11 @@ const STATUS_DOT_COLORS: Record<ActivityStatus, string> = {
 
 /* ================= MAIN PAGE ================= */
 export default function BarberActivityPage() {
-  const [activities, setActivities] = useState<BarberActivity[]>([]);
+  const [activities, setActivities]     = useState<BarberActivity[]>([]);
   const [searchQuery, setSearchQuery]   = useState("");
   const [filterStatus, setFilterStatus] = useState("all");
 
-  const currentUser = getUser();
+  const { user: currentUser, logout }   = useAuth();
 
   useEffect(() => {
     setActivities(DUMMY_ACTIVITY);

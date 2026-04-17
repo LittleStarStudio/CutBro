@@ -12,9 +12,9 @@ interface ShiftConfig {
 export type ShiftSchedule = Record<ShiftKey, ShiftConfig>;
 
 const DEFAULT: ShiftSchedule = {
-  morning:   { enabled: true, start: "07:00", end: "13:00" },
-  afternoon: { enabled: true, start: "13:00", end: "19:00" },
-  evening:   { enabled: true, start: "19:00", end: "22:00" },
+  morning:   { enabled: true, start: "09:00", end: "13:00" },
+  afternoon: { enabled: true, start: "13:00", end: "17:00" },
+  evening:   { enabled: true, start: "17:00", end: "21:00" },
 };
 
 interface ShiftContextValue {

@@ -6,6 +6,7 @@ export type Profile = {
   name: string;
   email: string;
   photoPreview: string;
+  photoFile?: File;
   password?: string;
   confirmPassword?: string;
 };
@@ -14,7 +15,7 @@ interface Props {
   open: boolean;
   onClose: () => void;
   data: Profile;
-  onSave: (data: Profile) => void;
+  onSave: (data: Profile) => Promise<void>;
 }
 
 // ─── Success Modal ────────────────────────────────────────────────────────────
@@ -66,16 +67,22 @@ function FieldWarning({ message }: { message: string }) {
 export default function ProfileModal({ open, onClose, data, onSave }: Props) {
   const [form, setForm]                               = useState<Profile>(data);
   const [photoFile, setPhotoFile]                     = useState<string | null>(null);
+  const [photoFileObj, setPhotoFileObj]               = useState<File | null>(null);
+  const [saving, setSaving]                           = useState(false);
   const [showPassword, setShowPassword]               = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [showSuccess, setShowSuccess]                 = useState(false);
   const [submitted, setSubmitted]                     = useState(false);
+  const [saveError,  setSaveError]                    = useState<string | null>(null); 
 
   useEffect(() => {
     if (open) {
       setForm({ ...data, password: "", confirmPassword: "" });
       setPhotoFile(null);
       setSubmitted(false);
+      setSaveError(null);  
+      setPhotoFileObj(null);
+      setSaving(false);
     }
   }, [open, data]);
 
@@ -120,27 +127,38 @@ export default function ProfileModal({ open, onClose, data, onSave }: Props) {
   const handlePhotoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
+      setPhotoFileObj(file);
       const reader = new FileReader();
       reader.onloadend = () => setPhotoFile(reader.result as string);
       reader.readAsDataURL(file);
     }
   };
 
-  const handleSave = () => {
+  const handleSave = async () => {
     setSubmitted(true);
     if (!hasChanges || !isValid) return;
 
     const updatedData: Profile = {
       ...form,
       photoPreview: photoFile || form.photoPreview,
+      photoFile: photoFileObj ?? undefined,
     };
     if (!form.password) {
       delete updatedData.password;
       delete updatedData.confirmPassword;
     }
 
-    onSave(updatedData);
-    setShowSuccess(true);
+    setSaving(true);
+    setSaveError(null);
+    try {
+      await onSave(updatedData);
+      setShowSuccess(true);
+    } catch {
+      setSaveError("Failed to save. Please check your connection and try again.");
+    } finally {
+      setSaving(false);
+    }
+
   };
 
   const handleSuccessClose = () => {
@@ -169,15 +187,28 @@ export default function ProfileModal({ open, onClose, data, onSave }: Props) {
             </div>
           )}
 
+          {saveError && (
+            <div className="flex items-start gap-2.5 p-3 bg-red-500/10 border border-red-500/40 rounded-lg">
+              <AlertCircle className="w-4 h-4 text-red-400 flex-shrink-0 mt-0.5" />
+              <p className="text-xs text-red-400">{saveError}</p>
+            </div>
+          )}
+
           {/* Photo Upload */}
           <div className="flex flex-row sm:flex-col items-center gap-4 p-4 sm:p-6 bg-zinc-800/50 rounded-lg border border-zinc-700">
             <div className="relative group flex-shrink-0">
               <div className="absolute inset-0 bg-gradient-to-r from-amber-500 to-orange-500 rounded-full blur-xl opacity-20 group-hover:opacity-40 transition-opacity" />
-              <img
-                src={photoFile || form.photoPreview || "/default-avatar.png"}
-                alt="Profile"
-                className="relative w-16 h-16 sm:w-28 sm:h-28 rounded-full object-cover border-4 border-zinc-700 shadow-lg"
-              />
+              {photoFile || form.photoPreview ? (
+                <img
+                  src={photoFile || form.photoPreview}
+                  alt="Profile"
+                  className="relative w-16 h-16 sm:w-28 sm:h-28 rounded-full object-cover border-4 border-zinc-700 shadow-lg"
+                />
+              ) : (
+                <div className="relative w-16 h-16 sm:w-28 sm:h-28 rounded-full border-4 border-zinc-700 shadow-lg bg-amber-500 flex items-center justify-center text-white font-bold text-xl sm:text-4xl select-none">
+                  {form.name ? form.name.split(" ").map((n) => n[0]).join("").toUpperCase().slice(0, 2) : "U"}
+                </div>
+              )}
             </div>
             <div className="flex flex-col items-start sm:items-center gap-2">
               <label className="cursor-pointer">
@@ -296,14 +327,14 @@ export default function ProfileModal({ open, onClose, data, onSave }: Props) {
             </button>
             <button
               onClick={handleSave}
-              disabled={!hasChanges}
+              disabled={!hasChanges || saving}
               className={`flex-1 px-6 py-3 rounded-lg font-bold transition-all duration-200 ${
-                hasChanges
+                hasChanges && !saving
                   ? "bg-amber-500 hover:bg-amber-600 text-black cursor-pointer"
                   : "bg-zinc-700 text-zinc-500 cursor-not-allowed"
               }`}
             >
-              Save Changes
+              {saving ? "Saving..." : "Save Changes"}
             </button>
           </div>
 

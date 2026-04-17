@@ -6,6 +6,7 @@ use App\Http\Controllers\Api\BaseController;
 
 use App\Models\BarberAttendance;
 use App\Models\BarberShiftAssignment;
+use App\Models\Barber;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 
@@ -140,4 +141,68 @@ class AttendanceController extends BaseController
         [$h, $m] = explode(':', $time);
         return (int)$h * 60 + (int)$m;
     }
+
+    public function weeklySchedule(Request $request)
+    {
+        $user = $request->user();
+
+        $barber = Barber::where('user_id', $user->id)->first();
+        if (!$barber) {
+            return $this->error('Barber profile not found.', 404);
+        }
+
+        $daysNumToName = [
+            0 => 'Sunday', 1 => 'Monday', 2 => 'Tuesday',
+            3 => 'Wednesday', 4 => 'Thursday', 5 => 'Friday', 6 => 'Saturday',
+        ];
+
+        // Mulai dari Minggu minggu ini
+        $weekStart = Carbon::now()->startOfWeek(Carbon::SUNDAY);
+
+        $assignments = BarberShiftAssignment::with(['shift'])
+            ->where('barber_id', $barber->id)
+            ->get();
+
+        $assignmentsByDay = $assignments->keyBy('day_of_week');
+
+        // Ambil semua attendance minggu ini sekaligus (1 query)
+        $assignmentIds = $assignments->pluck('id');
+        $weekEnd       = $weekStart->copy()->addDays(6);
+
+        $attendances = BarberAttendance::whereIn('barber_shift_assignment_id', $assignmentIds)
+            ->whereBetween('date', [$weekStart->toDateString(), $weekEnd->toDateString()])
+            ->get()
+            ->keyBy('barber_shift_assignment_id');
+
+        $result = [];
+
+        for ($i = 0; $i < 7; $i++) {
+            $date       = $weekStart->copy()->addDays($i);
+            $dayInt     = $date->dayOfWeek;
+            $dayName    = $daysNumToName[$dayInt];
+            $assignment = $assignmentsByDay->get($dayInt);
+
+            if ($assignment && $assignment->shift) {
+                $attendance = $attendances->get($assignment->id);
+
+                $result[$dayName] = [
+                    'shift_name'      => $assignment->shift->name,
+                    'start_time'      => substr($assignment->shift->start_time, 0, 5),
+                    'end_time'        => substr($assignment->shift->end_time, 0, 5),
+                    'actual_checkin'  => $attendance?->actual_checkin
+                                            ? substr($attendance->actual_checkin, 0, 5)
+                                            : null,
+                    'actual_checkout' => $attendance?->actual_checkout
+                                            ? substr($attendance->actual_checkout, 0, 5)
+                                            : null,
+                ];
+            } else {
+                $result[$dayName] = null;
+            }
+        }
+
+        return $this->success($result);
+    }
+
+    
 }
