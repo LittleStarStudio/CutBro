@@ -11,6 +11,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Password;
+use Illuminate\Support\Facades\Http;
 use Laravel\Socialite\Facades\Socialite;
 use Illuminate\Support\Str;
 
@@ -50,10 +51,8 @@ class AuthController extends BaseController
         if (!request()->has('code')) {
             $this->logLogin(null, null, 'failed', 'Google login cancelled', request());
 
-            return response()->json([
-                'success' => false,
-                'message' => 'Login cancelled by user'
-            ], 400);
+            $frontendUrl = env('FRONTEND_URL', 'http://localhost:5173');
+            return redirect("{$frontendUrl}/login?error=google_failed");
         }
 
         $googleUser = Socialite::driver('google')->stateless()->user();
@@ -61,10 +60,8 @@ class AuthController extends BaseController
         $user = User::where('email', $googleUser->email)->first();
 
         if ($user && $user->status !== 'active') {
-            return response()->json([
-                'success' => false,
-                'message' => 'Account is '.$user->status
-            ], 403);
+            $frontendUrl = env('FRONTEND_URL', 'http://localhost:5173');
+            return redirect("{$frontendUrl}/login?error=account_{$user->status}");
         }
 
         if ($user) {
@@ -117,11 +114,12 @@ class AuthController extends BaseController
             request()
         );
 
-        return response()->json([
-            'access_token' => $accessToken,
+        $frontendUrl = env('FRONTEND_URL', 'http://localhost:5173');
+        $query = http_build_query([
+            'access_token'  => $accessToken,
             'refresh_token' => $refreshToken,
-            'token_type' => 'Bearer'
         ]);
+        return redirect("{$frontendUrl}/auth/google/callback?{$query}");
     }
 
     /**
@@ -399,12 +397,13 @@ class AuthController extends BaseController
             $request->only('email')
         );
 
-        if ($status === Password::RESET_LINK_SENT) {
-            return $this->success('Password reset link sent to your email');
-        }
+        return match ($status) {
+            Password::RESET_LINK_SENT => $this->success('Password reset link sent to your email'),
+            Password::RESET_THROTTLED => $this->error('Please wait a moment before requesting another reset link.', 429),
+            Password::INVALID_USER    => $this->error('No account found with that email address.', 404),
+            default                   => $this->error('Failed to send reset link. Please try again.', 500),
+        };
 
-        // Apakah email ada / tidak
-        return $this->success('If the email exists, a reset link has been sent');
     }
 
     /**
@@ -441,10 +440,12 @@ class AuthController extends BaseController
             $request->only('email', 'password', 'password_confirmation', 'token'),
             function (User $user, string $password) {
                 $user->forceFill([
-                    'password' => bcrypt($password),
+                    'password'       => bcrypt($password),
+                    'login_attempts' => 0,
+                    'locked_until'   => null,
                 ])->save();
 
-                // optional: revoke all tokens
+                // Revoke all tokens so user must login again
                 $user->tokens()->delete();
             }
         );
@@ -485,10 +486,13 @@ class AuthController extends BaseController
     {
         // Validasi
         $request->validate([
-            'name' => 'required|string|max:100',
-            'email' => 'required|email|unique:users,email',
-            'password' => 'required|min:6',
-            'barbershop_name' => 'required|string|max:150',
+            'name'             => 'required|string|max:100',
+            'email'            => 'required|email|unique:users,email',
+            'password'         => 'required|min:6',
+            'barbershop_name'  => 'required|string|max:150',
+            'phone'            => 'required|string|max:20|unique:barbershops,phone',
+            'address'          => 'required|string|max:255',
+            'city'             => 'required|string|max:100',
         ]);
 
         // Check if owner role exists
@@ -499,12 +503,12 @@ class AuthController extends BaseController
 
         // Create barbershop
         $barbershop = Barbershop::create([
-            'name' => $request->barbershop_name,
-            'slug' => Str::slug($request->barbershop_name) . '-' . Str::random(5),
-            'address' => '-',
-            'city' => '-',
-            'phone' => '-',
-            'status' => 'active'
+            'name'    => $request->barbershop_name,
+            'slug'    => Str::slug($request->barbershop_name) . '-' . Str::random(5),
+            'address' => $request->address,
+            'city'    => $request->city,
+            'phone'   => $request->phone,
+            'status'  => 'active'
         ]);
 
         // Create barbershop owner
@@ -518,6 +522,8 @@ class AuthController extends BaseController
 
         // Email verification
         $user->sendEmailVerificationNotification();
+
+        $this->logLogin($user, $user->email, 'success', null, $request, 'register');
 
         return $this->success([
             'message' => 'Registration successful. Please verify your email and login.',
@@ -579,6 +585,8 @@ class AuthController extends BaseController
         // Email verification
         $user->sendEmailVerificationNotification();
 
+        $this->logLogin($user, $user->email, 'success', null, $request, 'register');
+        
         return $this->success([
             'message' => 'Registration successful. Please verify your email and login.',
             'role' => $this->sanitizeRole($user->role),
@@ -620,6 +628,7 @@ class AuthController extends BaseController
      */
     public function logout(Request $request)
     {
+        $user = $request->user();
         if (!$request->user()) {
             return $this->error('Unauthenticated', 401);
         }
@@ -629,7 +638,8 @@ class AuthController extends BaseController
                 ->where('id', $request->user()->currentAccessToken()->id)
                 ->delete();
 
-        return $this->success('Logged Out');
+        $this->logLogin($user, $user?->email, 'success', null, $request, 'logout');
+        return $this->success([], 'Logged out successfully.');
     }
 
     /**
@@ -640,8 +650,10 @@ class AuthController extends BaseController
      */
     public function logoutAll(Request $request)
     {
+        $user = $request->user();
         $request->user()->tokens()->delete();
 
+        $this->logLogin($user, $user?->email, 'success', null, $request, 'logout');
         return $this->success('Logged out from all devices');
     }
 
@@ -793,16 +805,37 @@ class AuthController extends BaseController
     /**
      * Log login attempt
      */
-    private function logLogin($user, $email, $status, $reason = null, Request $request)
+    private function logLogin($user, $email, $status, $reason = null, Request $request, string $action = 'login')
     {
+        $ip       = $request->ip();
+        $location = $request->input('location') ?: $this->resolveLocation($ip);
+
         LoginLog::create([
-            'user_id' => $user?->id,
-            'email' => $email,
-            'ip_address' => $request->ip(),
-            'device' => $request->header('User-Agent'),
-            'status' => $status,
-            'reason' => $reason
+            'user_id'    => $user?->id,
+            'email'      => $email,
+            'ip_address' => $ip,
+            'device'     => $request->header('User-Agent'),
+            'status'     => $status,
+            'reason'     => $reason,
+            'action'     => $action,
+            'location'   => $location,
         ]);
+    }
+
+    private function resolveLocation(string $ip): string
+    {
+        // IP private/lokal (127.0.0.1, 192.168.x.x, dll)
+        if (filter_var($ip, FILTER_VALIDATE_IP, FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE) === false) {
+            return 'Local';
+        }
+        try {
+            $response = Http::timeout(2)->get("http://ip-api.com/json/{$ip}?fields=city,country,status");
+            $data = $response->json();
+            if (($data['status'] ?? '') === 'success') {
+                return "{$data['city']}, {$data['country']}";
+            }
+        } catch (\Exception $e) { /* silent */ }
+        return '-';
     }
 
     /**
@@ -811,15 +844,19 @@ class AuthController extends BaseController
     private function sanitizeUser(User $user): array
     {
         return [
-            'id' => $user->id,
-            'name' => $user->name,
-            'email' => $user->email,
-            'role' => $user->role->name,
+            'id'            => $user->id,
+            'name'          => $user->name,
+            'email'         => $user->email,
+            'role'          => $user->role->name,
             'barbershop_id' => $user->barbershop_id,
-            'status' => $user->status,
-            'created_at' => $user->created_at,
-            'updated_at' => $user->updated_at,
+            'status'        => $user->status,
+            'avatar_url'    => $user->avatar_url
+                                ? \Illuminate\Support\Facades\Storage::disk('public')->url($user->avatar_url)
+                                : null,
+            'created_at'    => $user->created_at,
+            'updated_at'    => $user->updated_at,
         ];
+
     }
 
     /**

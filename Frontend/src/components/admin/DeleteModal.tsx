@@ -8,6 +8,7 @@ interface DeleteModalProps {
   itemName: string;
   onConfirm: () => void;
   onCancel: () => void;
+  isLoading?: boolean;
 }
 
 export default function DeleteModal({
@@ -16,6 +17,7 @@ export default function DeleteModal({
   itemName,
   onConfirm,
   onCancel,
+  isLoading = false,
 }: DeleteModalProps) {
   const confirmRef = useRef<HTMLButtonElement>(null);
 
@@ -38,12 +40,12 @@ export default function DeleteModal({
   =============================== */
   useEffect(() => {
     const handleEsc = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onCancel();
+      if (e.key === "Escape" && !isLoading) onCancel();
     };
 
     window.addEventListener("keydown", handleEsc);
     return () => window.removeEventListener("keydown", handleEsc);
-  }, [onCancel]);
+  }, [onCancel, isLoading]);
 
   if (!isOpen) return null;
 
@@ -52,7 +54,7 @@ export default function DeleteModal({
       {/* Backdrop */}
       <div
         className="absolute inset-0 bg-black/50 backdrop-blur-sm"
-        onClick={onCancel}
+        onClick={isLoading ? undefined : onCancel}
       />
 
       {/* Modal */}
@@ -81,6 +83,7 @@ export default function DeleteModal({
             variant="outline"
             className="flex-1"
             onClick={onCancel}
+            disabled={isLoading}
           >
             Cancel
           </Button>
@@ -90,8 +93,9 @@ export default function DeleteModal({
             variant="destructive"
             className="flex-1"
             onClick={onConfirm}
+            disabled={isLoading}
           >
-            Delete
+            {isLoading ? "Deleting..." : "Delete"}
           </Button>
         </div>
       </div>

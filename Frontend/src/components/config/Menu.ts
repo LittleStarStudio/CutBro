@@ -18,6 +18,7 @@ import {
   CalendarClock,
   History,
   ReceiptIcon,
+  Layers,
 } from "lucide-react";
 
 import type { MenuItem } from "@/components/layout/SideBar";
@@ -25,52 +26,18 @@ import type { MenuItem } from "@/components/layout/SideBar";
 /* ================= SUPER ADMIN ================= */
 
 export const superAdminMenu: MenuItem[] = [
-  { icon: LayoutDashboard, label: "Dashboard", href: "/admin" },
-
-  { icon: Store, label: "Barbershops", href: "/admin/barbershops" },
-
-  { icon: Users, label: "Users", href: "/admin/users" },
-
-  { icon: ReceiptIcon, label: "Transaction", href: "/admin/transaction" },
-
-  { icon: CalendarSync, label: "Subscribe", href: "/admin/subscribe" },
-
-  {
-    icon: Users,
-    label: "Activity",
-    children: [
-      {
-        icon: ArrowLeftRight, 
-        label: "Login Logs", 
-        href: "/admin/login-logs",
-      },
-      {
-        icon: Users, 
-        label: "Users Activity", 
-        href: "/admin/users-activity",
-      },
-      {
-        icon: Users, 
-        label: "Admin Activity", 
-        href: "/admin/admin-activity",
-      },
-    ],
-  },
-
+  { icon: LayoutDashboard, label: "Dashboard",   href: "/admin" },
+  { icon: Store,           label: "Barbershops", href: "/admin/barbershops" },
+  { icon: Users,           label: "Users",       href: "/admin/users" },
+  { icon: ReceiptIcon,     label: "Transaction", href: "/admin/transaction" },
+  { icon: CalendarSync,    label: "Subscribe",   href: "/admin/subscribe" },
+  { icon: ArrowLeftRight,  label: "Login Logs",  href: "/admin/login-logs" },
   {
     icon: BarChart3,
     label: "Reports",
     children: [
-      {
-        icon: Users,
-        label: "User",
-        href: "/admin/reports/users",
-      },
-      {
-        icon: DollarSign,
-        label: "Salary",
-        href: "/admin/reports/revenue",
-      },
+      { icon: Users,      label: "User",   href: "/admin/reports/users" },
+      { icon: DollarSign, label: "Salary", href: "/admin/reports/salary" },
     ],
   },
 ];
@@ -78,87 +45,36 @@ export const superAdminMenu: MenuItem[] = [
 /* ================= OWNER ================= */
 
 export const ownerMenu: MenuItem[] = [
-  { icon: LayoutDashboard, label: "Dashboard", href: "/owner" },
-  {
-    icon: Store,
-    label: "Barbershops",
-    children: [
-      {
-        icon: SlidersHorizontal,
-        label: "Management",
-        href: "/owner/barbershop",
-      },
-      {
-        icon: DollarSign,
-        label: "Payment Method",
-        href: "/owner/payment",
-      },
-    ],
-  },
-  { icon: ReceiptIcon, label: "Transaction", href: "/owner/transaction" },
+  { icon: LayoutDashboard, label: "Dashboard",  href: "/owner" },
+  { icon: Store,           label: "Barbershop", href: "/owner/barbershop" },
   {
     icon: Scissors,
     label: "Barbers",
     children: [
-      {
-        icon: Clock10Icon,
-        label: "Shift",
-        href: "/owner/shift-Management",
-      },
-      {
-        icon: SlidersHorizontal,
-        label: "Management",
-        href: "/owner/barbers",
-      },
-      {
-        icon: ClipboardCheck,
-        label: "Assignment",
-        href: "/owner/shift",
-      },
-      {
-        icon: CalendarClock,
-        label: "Schedule",
-        href: "/owner/schedule",
-      },
+      { icon: Clock10Icon,      label: "Work Shifts",    href: "/owner/barbers-work-shifts" },
+      { icon: SlidersHorizontal,label: "Management",     href: "/owner/barbers-management" },
+      { icon: ClipboardCheck,   label: "Shift Schedule", href: "/owner/barbers-shift-schedule" },
+      { icon: CalendarClock,    label: "Attendance",     href: "/owner/barbers-attendance" },
     ],
   },
-  { icon: Calendar, label: "Booking", href: "/owner/booking" },
-  { icon: User, label: "Customers", href: "/owner/customers" },
   {
     icon: HandHelping,
     label: "Services",
     children: [
-      {
-        icon: Percent,
-        label: "Promos",
-        href: "/owner/promos",
-      },
-      {
-        icon: SlidersHorizontal,
-        label: "Management",
-        href: "/owner/services",
-      },
-      {
-        icon: Calendar,
-        label: "Categories",
-        href: "/owner/categories",
-      },
+      { icon: Layers,            label: "Categories",  href: "/owner/categories" },
+      { icon: SlidersHorizontal, label: "Management",  href: "/owner/services" },
+      { icon: Percent,           label: "Promos",      href: "/owner/promos" },
     ],
   },
+  { icon: Calendar,    label: "Bookings",      href: "/owner/booking" },
+  { icon: User,        label: "Customers",     href: "/owner/customers" },
+  { icon: ReceiptIcon, label: "Transactions",  href: "/owner/transaction" },
   {
     icon: BarChart3,
     label: "Reports",
     children: [
-      {
-        icon: DollarSign,
-        label: "Salary",
-        href: "/owner/reports",
-      },
-      {
-        icon: Calendar,
-        label: "Barber",
-        href: "/owner/barber-report",
-      },
+      { icon: DollarSign, label: "Salary", href: "/owner/reports" },
+      { icon: Calendar,   label: "Barber", href: "/owner/barber-report" },
     ],
   },
 ];
@@ -166,11 +82,11 @@ export const ownerMenu: MenuItem[] = [
 /* ================= BARBER ================= */
 
 export const barberMenu: MenuItem[] = [
-  { icon: LayoutDashboard, label: "Dashboard", href: "/barber" },
-  { icon: Store,           label: "My Workplace",  href: "/barber/barbershops" },
-  { icon: Calendar, label: "My Activity", href: "/barber/activity" },
-  { icon: History, label: "My History", href: "/barber/my-history" },
-  { icon: CalendarClock, label: "My Schedule", href: "/barber/my-schedule" },
+  { icon: LayoutDashboard, label: "Dashboard",   href: "/barber" },
+  { icon: Store,           label: "My Workplace",href: "/barber/barbershops" },
+  { icon: Calendar,        label: "My Activity", href: "/barber/activity" },
+  { icon: History,         label: "My History",  href: "/barber/my-history" },
+  { icon: CalendarClock,   label: "My Schedule", href: "/barber/my-schedule" },
 ];
 
 export const customerMenu: MenuItem[] = [
@@ -181,22 +97,7 @@ export const customerMenu: MenuItem[] = [
 
 /* ================= LOGOS ================= */
 
-export const superAdminLogo = {
-  icon: Scissors,
-  text: "Admin",
-};
-
-export const ownerLogo = {
-  icon: Scissors,
-  text: "Owner",
-};
-
-export const barberLogo = {
-  icon: Scissors,
-  text: "Barber",
-};
-
-export const customerLogo = {
-  icon: Scissors,
-  text: "Customer",
-};
+export const superAdminLogo = { icon: Scissors, text: "Admin" };
+export const ownerLogo      = { icon: Scissors, text: "Owner" };
+export const barberLogo     = { icon: Scissors, text: "Barber" };
+export const customerLogo   = { icon: Scissors, text: "Customer" };

@@ -19,13 +19,16 @@ interface SearchAndFiltersProps {
   setSearchQuery: (query: string) => void;
   searchPlaceholder: string;
   filters: Filter[];
+  extraFilters?: React.ReactNode;  
 }
+
 
 const SearchAndFilters: React.FC<SearchAndFiltersProps> = ({
   searchQuery,
   setSearchQuery,
   searchPlaceholder,
-  filters
+  filters,
+  extraFilters,
 }) => {
   return (
     <div className="bg-zinc-900 rounded-xl p-4 border border-zinc-800 mb-4">
@@ -57,6 +60,7 @@ const SearchAndFilters: React.FC<SearchAndFiltersProps> = ({
             </select>
           </div>
         ))}
+        {extraFilters}
       </div>
     </div>
   );

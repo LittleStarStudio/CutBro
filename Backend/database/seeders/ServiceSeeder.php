@@ -18,6 +18,7 @@ class ServiceSeeder extends Seeder
                     'name' => 'Basic'
                 ],
                 [
+                    'barbershop_id' => $category->barbershop_id,
                     'category_id' => $category->id,
                     'price' => 50000,
                     'duration_minutes' => 30,
@@ -28,9 +29,10 @@ class ServiceSeeder extends Seeder
             Service::updateOrCreate(
                 [
                     'category_id' => $category->id,
-                    'name' => 'Premium' 
+                    'name' => 'Premium'
                 ],
                 [
+                    'barbershop_id' => $category->barbershop_id,
                     'category_id' => $category->id,
                     'price' => 80000,
                     'duration_minutes' => 60,

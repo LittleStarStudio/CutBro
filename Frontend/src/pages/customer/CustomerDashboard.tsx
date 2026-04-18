@@ -5,11 +5,11 @@ import Footer from "@/components/layout/Footer";
 import HomeContent from "@/components/landing/HomeContent";
 import BottomNav from "@/components/layout/BottomNav";
 import PageTransition from "@/components/layout/PageTransition";
-import { getUser, logout } from "@/lib/auth";
+import { useAuth } from "@/components/context/AuthContext";
 import { customerMenu } from "@/components/config/Menu";
 
 export default function CustomerDashboard() {
-  const user = getUser();
+  const { user, logout } = useAuth();
 
   return (
     <PageTransition>

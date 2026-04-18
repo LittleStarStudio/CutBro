@@ -54,7 +54,7 @@ export function HeroSection() {
             style={{ animationDelay: "0.1s" }}
           >
             Whether you're a customer looking for the best barbershop, a
-            professional barber, or an owner growing your business — BarberBook
+            professional barber, or an owner growing your business — CutBro
             is here for you.
           </p>
 

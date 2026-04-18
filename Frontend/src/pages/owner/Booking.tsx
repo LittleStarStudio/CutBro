@@ -1,14 +1,14 @@
 import DashboardLayout from "@/components/dashboard/DashboardLayout";
 import { useState, useEffect, useMemo } from "react";
-import { Calendar, Clock, Phone, X } from "lucide-react";
+import { Calendar, Clock, Mail, X, CheckCircle } from "lucide-react";
 
 import { ownerLogo, ownerMenu } from "@/components/config/Menu";
-import { logout, getUser } from "@/lib/auth";
+import { useAuth } from "@/components/context/AuthContext";
+import * as ownerService from "@/services/owner.service";
 
-import { searchInObject, filterByField, capitalizeFirst } from "@/lib/utils/AdminUtils";
+import { searchInObject, filterByField } from "@/lib/utils/AdminUtils";
 
 import Badge from "@/components/admin/Badge";
-import DeleteModal from "@/components/admin/DeleteModal";
 import ActionButtons from "@/components/admin/ActionButtons";
 import EditModal, { type FormField } from "@/components/admin/EditModal";
 
@@ -21,69 +21,112 @@ import MobileCard from "@/components/admin/MobileCard";
 import { useToast } from "@/components/ui/Toast";
 
 /* ================= TYPES ================= */
-type BookingStatus = "pending" | "paid" | "canceled";
+type BookingStatus = "pending" | "paid" | "done" | "no_show" | "canceled" | "expired";
 
 interface Booking {
   id: number;
   customerName: string;
-  customerPhone: string;
+  customerEmail: string;  
   barber: string;
   service: string;
   date: string;
   time: string;
+  endTime: string;
   price: string;
   status: BookingStatus;
+  rawStatus: string;       
 }
 
-/* ================= DUMMY DATA ================= */
-const DUMMY_BOOKINGS: Booking[] = [
-  { id: 1, customerName: "Ahmad Wijaya",  customerPhone: "081234567890", barber: "John Barber",  service: "Premium Haircut",      date: "2024-02-15", time: "10:00", price: "Rp 75,000",  status: "paid"    },
-  { id: 2, customerName: "Budi Santoso",  customerPhone: "082345678901", barber: "Mike Stylist", service: "Haircut + Beard Trim", date: "2024-02-15", time: "11:30", price: "Rp 100,000", status: "pending" },
-  { id: 3, customerName: "Chandra Putra", customerPhone: "083456789012", barber: "David Cut",    service: "Basic Haircut",        date: "2024-02-14", time: "14:00", price: "Rp 50,000",  status: "canceled"},
-];
+const mapStatus = (s: string): BookingStatus => {
+  if (s === "paid")      return "paid";
+  if (s === "done")      return "done";
+  if (s === "no_show")   return "no_show";
+  if (s === "expired")   return "expired";
+  if (s === "cancelled") return "canceled";
+  return "pending";
+};
 
 /* ================= CONSTANTS ================= */
 const STATUS_FILTER_OPTIONS = [
   { value: "all",      label: "All Status" },
   { value: "pending",  label: "Pending"    },
   { value: "paid",     label: "Paid"       },
-  { value: "canceled", label: "Canceled"   },
+  { value: "done",     label: "Done"       },
+  { value: "no_show",  label: "Not Show"   },
+  { value: "canceled", label: "Cancelled"  },
+  { value: "expired",  label: "Expired"    },
 ];
 
-const STATUS_STYLES: Record<BookingStatus, "warning" | "success" | "danger"> = {
+// STATUS_STYLES:
+const STATUS_STYLES: Record<BookingStatus, "warning" | "success" | "danger" | "info" | "purple" | "default"> = {
   pending:  "warning",
   paid:     "success",
+  done:     "info",
+  no_show:  "purple",
   canceled: "danger",
+  expired:  "default",
 };
 
+// STATUS_DOT_COLORS:
 const STATUS_DOT_COLORS: Record<BookingStatus, string> = {
   pending:  "bg-yellow-500",
   paid:     "bg-green-500",
+  done:     "bg-cyan-500",
+  no_show:  "bg-purple-500",
   canceled: "bg-red-500",
+  expired:  "bg-gray-500",
+};
+
+const STATUS_LABELS: Record<BookingStatus, string> = {
+  pending:  "Pending",
+  paid:     "Paid",
+  done:     "Done",
+  no_show:  "Not Show",
+  canceled: "Cancelled",
+  expired:  "Expired",
 };
 
 /* ================= COMPONENT ================= */
 export default function OwnerBooking() {
   const toast = useToast();
+  const { user, logout } = useAuth();
 
   const [bookings, setBookings]       = useState<Booking[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
   const [filterStatus, setFilterStatus] = useState<"all" | BookingStatus>("all");
 
-  const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [showEditModal, setShowEditModal]     = useState(false);
   const [selectedBooking, setSelectedBooking] = useState<Booking | null>(null);
   const [isLoading, setIsLoading]             = useState(false);
 
-  const currentUser = getUser();
+  const loadBookings = () => {
+    ownerService.getBookings().then((data) => {
+      setBookings((data as any[]).map((b: any) => ({
+        id:            b.id,
+        customerName:  b.customer?.name ?? "-",
+        customerEmail: b.customer?.email ?? "-",
+        barber:        b.barber?.user?.name ?? b.barber?.name ?? "-",
+        service:       b.service?.name ?? "-",
+        date:          b.booking_date ?? "-",
+        time:          b.start_time ? b.start_time.slice(0, 5) : "-",
+        endTime:       b.end_time   ? b.end_time.slice(0, 5)   : "-",
+        price:         `Rp ${Number(b.total_price).toLocaleString("id-ID")}`,
+        status:        mapStatus(b.status),
+        rawStatus:     b.status ?? "pending_payment",
+      })));
+    }).catch(() => {
+      toast.error("Failed to Load", "Could not fetch bookings. Please refresh the page.");
+    });
+  };
 
-  useEffect(() => { setBookings(DUMMY_BOOKINGS); }, []);
+  useEffect(() => { loadBookings(); }, []);
 
   /* ================= STATS ================= */
   const stats = useMemo(() => ({
     pending:  bookings.filter((b) => b.status === "pending").length,
     paid:     bookings.filter((b) => b.status === "paid").length,
-    canceled: bookings.filter((b) => b.status === "canceled").length,
+    done:     bookings.filter((b) => b.status === "done").length,
+    canceled: bookings.filter((b) => ["canceled", "no_show", "expired"].includes(b.status)).length,
   }), [bookings]);
 
   /* ================= FILTER ================= */
@@ -95,26 +138,40 @@ export default function OwnerBooking() {
     });
   }, [bookings, searchQuery, filterStatus]);
 
+  const getStatusOptions = (rawStatus: string) => {
+    if (rawStatus === "pending_payment") {
+      return [
+        { value: "paid",     label: "Paid (Mark as Paid)" },
+        { value: "canceled", label: "Cancelled"           },
+      ];
+    }
+    if (rawStatus === "paid") {
+      return [
+        { value: "done",     label: "Done (Service Completed)" },
+        { value: "no_show",  label: "Not Show"                 },
+        { value: "canceled", label: "Cancelled"                },
+      ];
+    }
+    return [];
+  };  
+
   /* ================= EDIT MODAL FIELDS ================= */
   const editFields: FormField[] = [
-    { name: "customerName",  label: "Customer Name",  type: "text",   disabled: true, helperText: "Customer information cannot be modified" },
-    { name: "customerPhone", label: "Phone Number",   type: "text",   disabled: true },
-    { name: "barber",        label: "Barber",         type: "text",   disabled: true },
-    { name: "service",       label: "Service",        type: "text",   disabled: true },
-    { name: "date",          label: "Date",           type: "date",   disabled: true },
-    { name: "time",          label: "Time",           type: "text",   disabled: true },
-    { name: "price",         label: "Price",          type: "text",   disabled: true },
+    { name: "customerName",  label: "Customer Name", type: "text", disabled: true, helperText: "Customer information cannot be modified" },
+    { name: "customerEmail", label: "Email",         type: "text", disabled: true },
+    { name: "barber",        label: "Barber",        type: "text", disabled: true },
+    { name: "service",       label: "Service",       type: "text", disabled: true },
+    { name: "date",          label: "Date",          type: "date", disabled: true },
+    { name: "time",          label: "Start Time",    type: "text", disabled: true },
+    { name: "endTime",       label: "End Time",      type: "text", disabled: true },
+    { name: "price",         label: "Price",         type: "text", disabled: true },
     {
       name: "status",
       label: "Booking Status",
       type: "select",
       required: true,
-      options: [
-        { value: "pending",  label: "Pending"  },
-        { value: "paid",     label: "Paid"     },
-        { value: "canceled", label: "Canceled" },
-      ],
-      helperText: "Update the booking status based on payment or cancellation",
+      options: getStatusOptions(selectedBooking?.rawStatus ?? ""),
+      helperText: "Only valid status transitions are shown",
     },
   ];
 
@@ -125,44 +182,28 @@ export default function OwnerBooking() {
   };
 
   const handleSaveEdit = async (data: Record<string, any>) => {
+    if (!selectedBooking) return;
     setIsLoading(true);
+    // Map UI status back to backend status
+    const backendStatusMap: Record<string, string> = {
+      paid:     "paid",
+      done:     "done",
+      no_show:  "no_show",
+      canceled: "cancelled",
+    };
+    const backendStatus = backendStatusMap[data.status] ?? data.status;
     try {
-      await new Promise((resolve) => setTimeout(resolve, 1500));
-      setBookings((prev) =>
-        prev.map((booking) =>
-          booking.id === selectedBooking?.id
-            ? { ...booking, status: data.status as BookingStatus }
-            : booking
-        )
-      );
+      await ownerService.updateBookingStatus(selectedBooking.id, backendStatus);
+      loadBookings();
       setShowEditModal(false);
-      toast.success("Booking Updated", `Status changed to ${capitalizeFirst(data.status)}.`);
+      toast.success("Booking Updated", `Status changed to ${STATUS_LABELS[data.status as BookingStatus] ?? data.status}.`);
       setSelectedBooking(null);
-    } catch {
-      toast.error("Update Failed", "Something went wrong. Please try again.");
+    } catch (err: any) {
+      const msg = err?.response?.data?.message ?? "Something went wrong. Please try again.";
+      toast.error("Update Failed", msg);
     } finally {
       setIsLoading(false);
     }
-  };
-
-  /* ================= DELETE ================= */
-  const handleDeleteClick = (booking: Booking) => {
-    setSelectedBooking(booking);
-    setShowDeleteModal(true);
-  };
-
-  const handleConfirmDelete = () => {
-    if (!selectedBooking) return;
-    const name = selectedBooking.customerName;
-    setBookings((prev) => prev.filter((b) => b.id !== selectedBooking.id));
-    setShowDeleteModal(false);
-    setSelectedBooking(null);
-    toast.success("Booking Deleted", `Booking for ${name} has been removed.`);
-  };
-
-  const handleCancelDelete = () => {
-    setShowDeleteModal(false);
-    setSelectedBooking(null);
   };
 
   /* ================= TABLE COLUMNS ================= */
@@ -174,35 +215,39 @@ export default function OwnerBooking() {
         <div className="text-white min-w-[120px]">
           <p className="font-semibold text-sm truncate max-w-[150px]">{booking.customerName}</p>
           <div className="flex items-center gap-1 text-xs text-[#B8B8B8] mt-0.5">
-            <Phone className="w-3 h-3 flex-shrink-0" />
-            <span className="truncate">{booking.customerPhone}</span>
+            <Mail className="w-3 h-3 flex-shrink-0" />
+            <span className="truncate">{booking.customerEmail}</span>
           </div>
         </div>
       ),
     },
-    { key: "barber",   header: "Barber",   headerClassName: "hidden md:table-cell", className: "hidden md:table-cell", render: (booking: Booking) => <span className="text-[#B8B8B8] text-sm truncate block max-w-[120px]">{booking.barber}</span> },
-    { key: "service",  header: "Service",  headerClassName: "hidden lg:table-cell", className: "hidden lg:table-cell", render: (booking: Booking) => <span className="text-[#B8B8B8] text-sm truncate block max-w-[140px]">{booking.service}</span> },
-    { key: "date", header: "Date", headerClassName: "hidden sm:table-cell", className: "hidden sm:table-cell", render: (booking: Booking) => <span className="text-[#B8B8B8] text-sm whitespace-nowrap">{booking.date}</span> },
-    { key: "time", header: "Time", headerClassName: "hidden sm:table-cell", className: "hidden sm:table-cell", render: (booking: Booking) => <span className="text-[#B8B8B8] text-sm whitespace-nowrap">{booking.time}</span> },
-    { key: "price",    header: "Price",    headerClassName: "hidden md:table-cell", className: "hidden md:table-cell", render: (booking: Booking) => <span className="text-[#B8B8B8] text-sm whitespace-nowrap">{booking.price}</span> },
+    { key: "barber",   header: "Barber",     headerClassName: "hidden md:table-cell text-left",   className: "hidden md:table-cell", render: (booking: Booking) => <span className="text-[#B8B8B8] text-sm truncate block max-w-[120px]">{booking.barber}</span> },
+    { key: "service",  header: "Service",    headerClassName: "hidden lg:table-cell text-left",   className: "hidden lg:table-cell", render: (booking: Booking) => <span className="text-[#B8B8B8] text-sm truncate block max-w-[140px]">{booking.service}</span> },
+    { key: "date",     header: "Date",       headerClassName: "hidden sm:table-cell text-left",   className: "hidden sm:table-cell", render: (booking: Booking) => <span className="text-[#B8B8B8] text-sm whitespace-nowrap">{booking.date}</span> },
+    { key: "time",     header: "Start Time", headerClassName: "hidden sm:table-cell text-left",   className: "hidden sm:table-cell", render: (booking: Booking) => <span className="text-[#B8B8B8] text-sm whitespace-nowrap">{booking.time}</span>    },
+    { key: "endTime",  header: "End Time",   headerClassName: "hidden sm:table-cell text-left",   className: "hidden sm:table-cell", render: (booking: Booking) => <span className="text-[#B8B8B8] text-sm whitespace-nowrap">{booking.endTime}</span> },
+    { key: "price",    header: "Price",      headerClassName: "hidden md:table-cell text-left",   className: "hidden md:table-cell", render: (booking: Booking) => <span className="text-[#B8B8B8] text-sm whitespace-nowrap">{booking.price}</span> },
     {
       key: "status",
       header: "Status",
       render: (booking: Booking) => (
-        <Badge text={capitalizeFirst(booking.status)} variant={STATUS_STYLES[booking.status]} showDot dotColor={STATUS_DOT_COLORS[booking.status]} />
+        <Badge text={STATUS_LABELS[booking.status]} variant={STATUS_STYLES[booking.status]} showDot dotColor={STATUS_DOT_COLORS[booking.status]} />
       ),
     },
     {
       key: "actions",
       header: "Actions",
-      headerClassName: "text-right",
+      headerClassName: "text-center",
       className: "text-right",
-      render: (booking: Booking) => (
-        <ActionButtons actions={[
-          { type: "edit",   onClick: () => handleEditClick(booking)   },
-          { type: "delete", onClick: () => handleDeleteClick(booking) },
-        ]} />
-      ),
+      render: (booking: Booking) => {
+        const isTerminal = ["done", "canceled", "no_show", "expired"].includes(booking.status);
+        if (isTerminal) return <span className="text-[#555] text-xs">—</span>;
+        return (
+          <ActionButtons actions={[
+            { type: "edit", onClick: () => handleEditClick(booking) },
+          ]} />
+        );
+      },
     },
   ];
 
@@ -213,7 +258,7 @@ export default function OwnerBooking() {
       showSidebar
       menuItems={ownerMenu}
       logo={ownerLogo}
-      userProfile={currentUser ?? { name: "owner", email: "owner@cutbro.com", role: "owner" }}
+      userProfile={user ?? { name: "owner", email: "owner@cutbro.com", role: "owner" }}
       showNotification
       notificationCount={3}
       onLogout={logout}
@@ -221,11 +266,12 @@ export default function OwnerBooking() {
       <div className="w-full space-y-6 lg:space-y-8">
         <StatsGrid
           stats={[
-            { icon: Clock,    title: "Pending Bookings",  value: stats.pending  },
-            { icon: Calendar, title: "Paid Bookings",     value: stats.paid     },
-            { icon: X,        title: "Canceled Bookings", value: stats.canceled },
+            { icon: Clock,        title: "Pending",            value: stats.pending  },
+            { icon: Calendar,     title: "Paid (Confirmed)",   value: stats.paid     },
+            { icon: CheckCircle,  title: "Done (Completed)",   value: stats.done     },
+            { icon: X,            title: "Cancelled/Expired",  value: stats.canceled },
           ]}
-          columns={3}
+          columns={4}
         />
 
         <TableCard
@@ -247,21 +293,32 @@ export default function OwnerBooking() {
               renderCard={(booking: Booking) => (
                 <MobileCard
                   title={booking.customerName}
-                  subtitle={<div className="flex items-center gap-1 text-xs text-[#B8B8B8]"><Phone className="w-3 h-3 flex-shrink-0" /><span className="truncate">{booking.customerPhone}</span></div>}
-                  badge={<Badge text={capitalizeFirst(booking.status)} variant={STATUS_STYLES[booking.status]} showDot dotColor={STATUS_DOT_COLORS[booking.status]} />}
+                  subtitle={
+                    <div className="flex items-center gap-1 text-xs text-[#B8B8B8]">
+                      <Mail className="w-3 h-3 flex-shrink-0" />
+                      <span className="truncate">{booking.customerEmail}</span>
+                    </div>
+                  }
+                  badge={<Badge text={STATUS_LABELS[booking.status]} variant={STATUS_STYLES[booking.status]} showDot dotColor={STATUS_DOT_COLORS[booking.status]} />}
                   fields={[
                     { label: "Barber",        value: booking.barber },
                     { label: "Service",       value: booking.service },
-                    { label: "Date", value: booking.date },
-                    { label: "Time", value: booking.time },
+                    { label: "Date",          value: booking.date    },
+                    { label: "Start Time",    value: booking.time    },
+                    { label: "End Time",      value: booking.endTime },
                     { label: "Price",         value: booking.price },
                   ]}
-                  actions={
-                    <ActionButtons actions={[
-                      { type: "edit",   onClick: () => handleEditClick(booking)   },
-                      { type: "delete", onClick: () => handleDeleteClick(booking) },
-                    ]} />
-                  }
+                  actions={(() => {
+                    const isTerminal = ["done", "canceled", "no_show", "expired"].includes(booking.status);
+                    if (isTerminal) return undefined;
+                    return (
+                      <div className="flex justify-end">
+                        <ActionButtons actions={[
+                          { type: "edit", onClick: () => handleEditClick(booking) },
+                        ]} />
+                      </div>
+                    );
+                  })()}
                 />
               )}
             />
@@ -281,13 +338,6 @@ export default function OwnerBooking() {
         saveButtonText="Update Status"
       />
 
-      <DeleteModal
-        isOpen={showDeleteModal}
-        title="Delete Booking"
-        itemName={selectedBooking?.customerName ?? ""}
-        onConfirm={handleConfirmDelete}
-        onCancel={handleCancelDelete}
-      />
     </DashboardLayout>
   );
 }

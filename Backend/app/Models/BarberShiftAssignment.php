@@ -3,13 +3,17 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\SoftDeletes;
 
 class BarberShiftAssignment extends Model
 {
+    use SoftDeletes;
+
     protected $fillable = [
         'barber_id',
         'shift_id',
         'day_of_week',
+        'status',
     ];
 
     public function barber()
@@ -21,4 +25,10 @@ class BarberShiftAssignment extends Model
     {
         return $this->belongsTo(Shift::class);
     }
+
+    public function attendances()
+    {
+        return $this->hasMany(BarberAttendance::class, 'barber_shift_assignment_id');
+    }
+
 }

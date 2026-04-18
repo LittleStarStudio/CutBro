@@ -4,11 +4,10 @@ import { ShoppingBag, Wallet, Scissors, FileSpreadsheet, Info, Copy, CheckCircle
 import * as XLSX from "xlsx";
 
 import { ownerLogo, ownerMenu } from "@/components/config/Menu";
-import { logout, getUser } from "@/lib/auth";
+import { useAuth } from "@/components/context/AuthContext";
+import * as ownerService from "@/services/owner.service";
 
 import { searchInObject, filterByField } from "@/lib/utils/AdminUtils";
-
-import Badge from "@/components/admin/Badge";
 
 import PageHeader from "@/components/admin/PageHeader";
 import StatsGrid from "@/components/admin/StatGrid";
@@ -17,105 +16,50 @@ import DataTable from "@/components/admin/DataTable";
 import MobileCardList from "@/components/admin/MobileCardList";
 import MobileCard from "@/components/admin/MobileCard";
 
-/* ================= PAYMENT METHODS ================= */
-export const PAYMENT_METHODS = [
-  { id: "card",  label: "Credit / Debit Card" },
-  { id: "gopay", label: "GoPay" },
-  { id: "ovo",   label: "OVO" },
-  { id: "dana",  label: "DANA" },
-];
-
-type PaymentMethodId = typeof PAYMENT_METHODS[number]["id"];
-
 /* ================= TYPES ================= */
 interface Transaction {
   id: number;
   invoiceNumber: string;
   customerName: string;
-  service: "Haircut" | "Shave" | "Haircut & Shave" | "Hair Coloring" | "Hair Wash" | "Beard Trim";
+  service: string;
   barberName: string;
   price: number;
   date: string;
-  paymentMethod: PaymentMethodId;
 }
 
-/* ================= HELPER: generate invoice number ================= */
-const generateInvoiceNumber = (id: number): string => {
-  return `INV-2026-${String(id).padStart(3, "0")}`;
-};
-
-/* ================= DUMMY DATA ================= */
-const DUMMY_TRANSACTION_DATA: Transaction[] = [
-  { id: 1,  customerName: "Rizky Pratama",    service: "Haircut",          barberName: "John Barber",  price: 50000,  date: "2024-02-24", paymentMethod: "card",  invoiceNumber: generateInvoiceNumber(1)  },
-  { id: 2,  customerName: "Budi Santoso",     service: "Shave",            barberName: "Mike Stylist", price: 35000,  date: "2024-02-24", paymentMethod: "gopay", invoiceNumber: generateInvoiceNumber(2)  },
-  { id: 3,  customerName: "Andi Wijaya",      service: "Haircut & Shave",  barberName: "David Barber", price: 80000,  date: "2024-02-24", paymentMethod: "ovo",   invoiceNumber: generateInvoiceNumber(3)  },
-  { id: 4,  customerName: "Dika Ramadhan",    service: "Hair Coloring",    barberName: "John Barber",  price: 150000, date: "2024-02-23", paymentMethod: "dana",  invoiceNumber: generateInvoiceNumber(4)  },
-  { id: 5,  customerName: "Fajar Nugroho",    service: "Haircut",          barberName: "Andi Barber",  price: 50000,  date: "2024-02-23", paymentMethod: "gopay", invoiceNumber: generateInvoiceNumber(5)  },
-  { id: 6,  customerName: "Gilang Permana",   service: "Beard Trim",       barberName: "Mike Stylist", price: 30000,  date: "2024-02-23", paymentMethod: "card",  invoiceNumber: generateInvoiceNumber(6)  },
-  { id: 7,  customerName: "Hendra Kusuma",    service: "Haircut & Shave",  barberName: "David Barber", price: 80000,  date: "2024-02-23", paymentMethod: "ovo",   invoiceNumber: generateInvoiceNumber(7)  },
-  { id: 8,  customerName: "Irfan Hakim",      service: "Hair Wash",        barberName: "Andi Barber",  price: 25000,  date: "2024-02-22", paymentMethod: "dana",  invoiceNumber: generateInvoiceNumber(8)  },
-  { id: 9,  customerName: "Joko Prabowo",     service: "Haircut",          barberName: "John Barber",  price: 50000,  date: "2024-02-22", paymentMethod: "gopay", invoiceNumber: generateInvoiceNumber(9)  },
-  { id: 10, customerName: "Kevin Setiawan",   service: "Shave",            barberName: "Mike Stylist", price: 35000,  date: "2024-02-22", paymentMethod: "card",  invoiceNumber: generateInvoiceNumber(10) },
-  { id: 11, customerName: "Lukman Hakim",     service: "Hair Coloring",    barberName: "David Barber", price: 150000, date: "2024-02-22", paymentMethod: "dana",  invoiceNumber: generateInvoiceNumber(11) },
-  { id: 12, customerName: "Mahendra Putra",   service: "Haircut",          barberName: "Andi Barber",  price: 50000,  date: "2024-02-21", paymentMethod: "gopay", invoiceNumber: generateInvoiceNumber(12) },
-  { id: 13, customerName: "Nanda Pratama",    service: "Beard Trim",       barberName: "John Barber",  price: 30000,  date: "2024-02-21", paymentMethod: "ovo",   invoiceNumber: generateInvoiceNumber(13) },
-  { id: 14, customerName: "Oscar Firmansyah", service: "Haircut & Shave",  barberName: "Mike Stylist", price: 80000,  date: "2024-02-21", paymentMethod: "card",  invoiceNumber: generateInvoiceNumber(14) },
-  { id: 15, customerName: "Pandu Wicaksono",  service: "Hair Wash",        barberName: "David Barber", price: 25000,  date: "2024-02-20", paymentMethod: "dana",  invoiceNumber: generateInvoiceNumber(15) },
-  { id: 16, customerName: "Qori Hidayat",     service: "Haircut",          barberName: "Andi Barber",  price: 50000,  date: "2024-02-20", paymentMethod: "gopay", invoiceNumber: generateInvoiceNumber(16) },
-  { id: 17, customerName: "Reza Mahardika",   service: "Shave",            barberName: "John Barber",  price: 35000,  date: "2024-02-20", paymentMethod: "ovo",   invoiceNumber: generateInvoiceNumber(17) },
-  { id: 18, customerName: "Surya Dinata",     service: "Hair Coloring",    barberName: "Mike Stylist", price: 150000, date: "2024-02-19", paymentMethod: "card",  invoiceNumber: generateInvoiceNumber(18) },
-  { id: 19, customerName: "Tegar Maulana",    service: "Haircut & Shave",  barberName: "David Barber", price: 80000,  date: "2024-02-19", paymentMethod: "gopay", invoiceNumber: generateInvoiceNumber(19) },
-  { id: 20, customerName: "Umar Fauzi",       service: "Beard Trim",       barberName: "Andi Barber",  price: 30000,  date: "2024-02-19", paymentMethod: "dana",  invoiceNumber: generateInvoiceNumber(20) },
-];
-
-/* ================= FILTER OPTIONS ================= */
-const SERVICE_FILTER_OPTIONS = [
-  { value: "all",             label: "All Services"    },
-  { value: "Haircut",         label: "Haircut"         },
-  { value: "Shave",           label: "Shave"           },
-  { value: "Haircut & Shave", label: "Haircut & Shave" },
-  { value: "Hair Coloring",   label: "Hair Coloring"   },
-  { value: "Hair Wash",       label: "Hair Wash"       },
-  { value: "Beard Trim",      label: "Beard Trim"      },
-];
-
-const BARBER_FILTER_OPTIONS = [
-  { value: "all",          label: "All Barbers"  },
-  { value: "John Barber",  label: "John Barber"  },
-  { value: "Mike Stylist", label: "Mike Stylist" },
-  { value: "David Barber", label: "David Barber" },
-  { value: "Andi Barber",  label: "Andi Barber"  },
-];
-
-const PAYMENT_FILTER_OPTIONS = [
-  { value: "all", label: "All Payments" },
-  ...PAYMENT_METHODS.map((p) => ({ value: p.id, label: p.label })),
-];
-
-const PAYMENT_STYLES: Record<PaymentMethodId, "info" | "warning" | "success" | "default"> = {
-  card:  "info",
-  gopay: "success",
-  ovo:   "warning",
-  dana:  "default",
-};
-
-/* ================= HELPER ================= */
-const getPaymentLabel = (id: PaymentMethodId) =>
-  PAYMENT_METHODS.find((p) => p.id === id)?.label ?? id;
 
 export default function SalesReport() {
   const [transactions, setTransactions]   = useState<Transaction[]>([]);
   const [searchQuery,  setSearchQuery]    = useState("");
   const [filterService, setFilterService] = useState("all");
   const [filterBarber,  setFilterBarber]  = useState("all");
-  const [filterPayment, setFilterPayment] = useState("all");
   const [copiedInvoice, setCopiedInvoice] = useState<string | null>(null);
 
-  const currentUser = getUser();
+  const { user, logout } = useAuth();
 
   useEffect(() => {
-    setTransactions(DUMMY_TRANSACTION_DATA);
+    ownerService.getTransactions().then((data) => {
+      setTransactions(data.map((t) => ({
+        id:            t.id,
+        invoiceNumber: t.order_id,
+        customerName:  t.customer_name,
+        service:       t.service_name,
+        barberName:    t.barber_name,
+        price:         t.gross_amount,     
+        date:          t.booking_date,     
+      })));
+    }).catch(() => {});
   }, []);
+
+  const serviceFilterOptions = useMemo(() => {
+    const unique = [...new Set(transactions.map((t) => t.service))];
+    return [{ value: "all", label: "All Services" }, ...unique.map((s) => ({ value: s, label: s }))];
+  }, [transactions]);
+
+  const barberFilterOptions = useMemo(() => {
+    const unique = [...new Set(transactions.map((t) => t.barberName))];
+    return [{ value: "all", label: "All Barbers" }, ...unique.map((b) => ({ value: b, label: b }))];
+  }, [transactions]);
 
   /* ================= COPY INVOICE ================= */
   const handleCopyInvoice = (invoice: string) => {
@@ -141,12 +85,11 @@ export default function SalesReport() {
       const matchesSearch = searchInObject(trx, searchQuery, ["customerName", "barberName"]);
       return (
         matchesSearch &&
-        filterByField(trx, "service",        filterService) &&
-        filterByField(trx, "barberName",     filterBarber)  &&
-        filterByField(trx, "paymentMethod",  filterPayment)
+        filterByField(trx, "service",    filterService) &&
+        filterByField(trx, "barberName", filterBarber)
       );
     });
-  }, [transactions, searchQuery, filterService, filterBarber, filterPayment]);
+  }, [transactions, searchQuery, filterService, filterBarber]);
 
   const formatCurrency = (amount: number) =>
     new Intl.NumberFormat("id-ID", {
@@ -158,14 +101,13 @@ export default function SalesReport() {
   /* ================= EXPORT ================= */
   const handleExportExcel = () => {
     const exportData = filteredTransactions.map((trx) => ({
-      "No":               trx.id,
-      "Invoice Number":   trx.invoiceNumber,
-      "Customer Name":    trx.customerName,
-      "Service":          trx.service,
-      "Barber":           trx.barberName,
-      "Price (IDR)":      trx.price,
-      "Payment Method":   getPaymentLabel(trx.paymentMethod),
-      "Date":             trx.date,
+      "No":             trx.id,
+      "Invoice Number": trx.invoiceNumber,
+      "Customer Name":  trx.customerName,
+      "Service":        trx.service,
+      "Barber":         trx.barberName,
+      "Price (IDR)":    trx.price,
+      "Date":           trx.date,
     }));
 
     const worksheet = XLSX.utils.json_to_sheet(exportData);
@@ -178,7 +120,6 @@ export default function SalesReport() {
       { wch: 20 },
       { wch: 15 },
       { wch: 15 },
-      { wch: 20 },
       { wch: 12 },
     ];
 
@@ -237,16 +178,6 @@ export default function SalesReport() {
       ),
     },
     {
-      key: "paymentMethod",
-      header: "Payment",
-      render: (trx: Transaction) => (
-        <Badge
-          text={getPaymentLabel(trx.paymentMethod)}
-          variant={PAYMENT_STYLES[trx.paymentMethod]}
-        />
-      ),
-    },
-    {
       key: "date",
       header: "Date",
       render: (trx: Transaction) => (
@@ -263,7 +194,7 @@ export default function SalesReport() {
       menuItems={ownerMenu}
       logo={ownerLogo}
       userProfile={
-        currentUser ?? {
+        user ?? {
           name: "owner",
           email: "owner@cutbro.com",
           role: "owner",
@@ -323,9 +254,8 @@ export default function SalesReport() {
           setSearchQuery={setSearchQuery}
           searchPlaceholder="Search customer or barber name..."
           filters={[
-            { label: "Service", value: filterService, onChange: setFilterService, options: SERVICE_FILTER_OPTIONS },
-            { label: "Barber",  value: filterBarber,  onChange: setFilterBarber,  options: BARBER_FILTER_OPTIONS  },
-            { label: "Payment", value: filterPayment, onChange: setFilterPayment, options: PAYMENT_FILTER_OPTIONS },
+            { label: "Service", value: filterService, onChange: setFilterService, options: serviceFilterOptions },
+            { label: "Barber",  value: filterBarber,  onChange: setFilterBarber,  options: barberFilterOptions  },
           ]}
           isEmpty={filteredTransactions.length === 0}
           emptyIcon={ShoppingBag}
@@ -345,12 +275,7 @@ export default function SalesReport() {
                 <MobileCard
                   title={trx.customerName}
                   subtitle={trx.service}
-                  headerRight={
-                    <Badge
-                      text={getPaymentLabel(trx.paymentMethod)}
-                      variant={PAYMENT_STYLES[trx.paymentMethod]}
-                    />
-                  }
+                  headerRight={<span className="text-xs text-[#B8B8B8]">{trx.date}</span>}
                   fields={[
                     {
                       label: "Invoice",
@@ -367,7 +292,6 @@ export default function SalesReport() {
                     },
                     { label: "Barber", value: trx.barberName },
                     { label: "Price",  value: <span className="text-[#D4AF37] font-semibold">{formatCurrency(trx.price)}</span> },
-                    { label: "Date",   value: trx.date },
                   ]}
                 />
               )}

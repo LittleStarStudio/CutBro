@@ -2,6 +2,11 @@
 import { User, Bell, ChevronDown, Settings, LogOut, Shield, PanelLeftClose, PanelLeftOpen } from "lucide-react";
 import { useState, useRef, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
+import { useAuth } from "@/components/context/AuthContext";
+import { updateProfile, uploadAvatar } from "@/services/auth.service";
+import { getAppSettings, updateAppSettings, uploadAppLogo } from "@/services/appSettings.service";
+import type { AppSettings } from "@/services/appSettings.service";
+import { useAppSettings } from "@/components/context/AppSettingsContext";
 
 import ProfileModal, { type Profile } from "@/components/profile/ProfileModal";
 import AdminProfileModal, { type AdminProfile } from "@/components/profile/AdminProfileModal";
@@ -52,8 +57,12 @@ export default function Header({
   const [showProfileModal,  setShowProfileModal]  = useState(false);
   const [showSettingsModal, setShowSettingsModal] = useState(false);
   const [notifPulse,        setNotifPulse]        = useState(false);
-  const dropdownRef = useRef<HTMLDivElement>(null);
-  const navigate    = useNavigate();
+  const dropdownRef                               = useRef<HTMLDivElement>(null);
+  const navigate                                  = useNavigate();
+  const { user: authUser, setUser }               = useAuth();
+  const displayUser                               = authUser ?? user;
+  const [appSettings, setAppSettings]             = useState<AppSettings | null>(null);
+  const { refresh: refreshBranding }              = useAppSettings();
 
   // hasSidebar: true saat layar >= 768px (sidebar aktif, BottomNav hilang)
   const [hasSidebar, setHasSidebar] = useState(
@@ -68,14 +77,21 @@ export default function Header({
     return () => mq.removeEventListener("change", handler);
   }, []);
 
-  const isAdmin = user?.role === "admin";
+  const isAdmin = displayUser?.role === "admin";
 
-  const profileData: Profile | undefined = user
-    ? { name: user.name, email: user.email, photoPreview: user.avatar ?? "" }
+  const profileData: Profile | undefined = displayUser
+    ? { name: displayUser.name, email: displayUser.email, photoPreview: displayUser.avatar ?? "" }
     : undefined;
 
-  const adminProfileData: AdminProfile | undefined = user
-    ? { name: user.name, email: user.email, photoPreview: user.avatar ?? "", appLogo: appLogo ?? "", appName: appName ?? "" }
+  const adminProfileData: AdminProfile | undefined = displayUser
+    ? {
+        name: displayUser.name,
+        email: displayUser.email,
+        photoPreview: displayUser.avatar ?? "",
+        appName: appSettings?.app_name ?? "",
+        appWebsite: appSettings?.app_website ?? "",
+        appLogo: appSettings?.app_logo_url ?? "",
+      }
     : undefined;
 
   useEffect(() => {
@@ -92,14 +108,86 @@ export default function Header({
     if (notificationCount > 0) setNotifPulse(true);
   }, [notificationCount]);
 
-  const initials = user?.name
-    ? user.name.split(" ").map((n) => n[0]).join("").toUpperCase().slice(0, 2)
+  const initials = displayUser?.name
+    ? displayUser.name.split(" ").map((n) => n[0]).join("").toUpperCase().slice(0, 2)
     : "U";
 
-  const handleProfileSave = (updated: Profile)     => { console.log("Profile updated:", updated); setShowProfileModal(false); };
-  const handleAdminSave   = (updated: AdminProfile) => { onAppSettingsSave?.(updated); setShowProfileModal(false); };
+  const handleProfileSave = async (updated: Profile): Promise<void> => {
+    let newAvatarUrl: string | undefined;
+    if (updated.photoFile) {
+      const result = await uploadAvatar(updated.photoFile);
+      newAvatarUrl = result.avatar_url;
+    }
+    if (updated.name !== displayUser?.name || updated.password) {
+      await updateProfile({
+        name: updated.name,
+        ...(updated.password ? { password: updated.password } : {}),
+      });
+    }
+    if (authUser) {
+      setUser({
+        ...authUser,
+        name: updated.name,
+        ...(newAvatarUrl ? { avatar: newAvatarUrl, avatar_url: newAvatarUrl } : {}),
+      });
+    }
+  };
 
-  const openProfileModal  = () => { setShowDropdown(false); onProfileClick?.(); setTimeout(() => setShowProfileModal(true), 10); };
+  const handleAdminSave = async (updated: AdminProfile): Promise<void> => {
+    // 1. Upload avatar jika ada
+    let newAvatarUrl: string | undefined;
+    if (updated.photoFile) {
+      const result = await uploadAvatar(updated.photoFile);
+      newAvatarUrl = result.avatar_url;
+    }
+
+    // 2. Update profile (name/password)
+    if (updated.name !== displayUser?.name || updated.password) {
+      await updateProfile({
+        name: updated.name,
+        ...(updated.password ? { password: updated.password } : {}),
+      });
+    }
+
+    // 3. Upload logo jika ada
+    if (updated.logoFileObj) {
+      await uploadAppLogo(updated.logoFileObj);
+    }
+
+    // 4. Update app name/website jika berubah
+    const appChanged =
+      updated.appName !== appSettings?.app_name ||
+      updated.appWebsite !== (appSettings?.app_website ?? "");
+    if (appChanged) {
+      await updateAppSettings({
+        ...(updated.appName ? { app_name: updated.appName } : {}),
+        ...(updated.appWebsite !== undefined ? { app_website: updated.appWebsite || null } : {}),
+      });
+    }
+
+    // 5. Update context user
+    if (authUser) {
+      setUser({
+        ...authUser,
+        name: updated.name,
+        ...(newAvatarUrl ? { avatar: newAvatarUrl, avatar_url: newAvatarUrl } : {}),
+      });
+
+      refreshBranding();
+    }
+  };
+
+  const openProfileModal = async () => {
+    setShowDropdown(false);
+    onProfileClick?.();
+    if (isAdmin) {
+      try {
+        const settings = await getAppSettings();
+        setAppSettings(settings);
+      } catch {}
+    }
+    setTimeout(() => setShowProfileModal(true), 10);
+  };
   const openSettingsModal = () => { setShowDropdown(false); setTimeout(() => setShowSettingsModal(true), 10); };
 
   /*
@@ -223,8 +311,8 @@ export default function Header({
                     className="flex items-center gap-2.5 px-2.5 py-1.5 rounded-xl hover:bg-white/5 transition-all duration-200"
                   >
                     <span className={isAdmin ? "avatar-ring-admin shrink-0" : "avatar-ring-user shrink-0"}>
-                      {user?.avatar ? (
-                        <img src={user.avatar} alt="Avatar" className="w-8 h-8 rounded-full object-cover block" />
+                      {displayUser?.avatar ? (
+                        <img src={displayUser.avatar} alt="Avatar" className="w-8 h-8 rounded-full object-cover block" />
                       ) : (
                         <div className={`w-8 h-8 rounded-full flex items-center justify-center text-white text-xs font-bold select-none ${isAdmin ? "bg-purple-600" : "bg-amber-500"}`}>
                           {initials}
@@ -233,9 +321,9 @@ export default function Header({
                     </span>
 
                     <div className="hidden sm:flex flex-col items-start text-left">
-                      <span className="text-sm font-medium text-white leading-none">{user?.name || "User"}</span>
+                      <span className="text-sm font-medium text-white leading-none">{displayUser?.name || "User"}</span>
                       <span className={`text-[11px] mt-0.5 leading-none font-medium ${isAdmin ? "text-purple-400" : "text-zinc-500"}`}>
-                        {isAdmin ? "Administrator" : (user?.role ?? "Member")}
+                        {isAdmin ? "Administrator" : (displayUser?.role ?? "Member")}
                       </span>
                     </div>
 
@@ -247,8 +335,8 @@ export default function Header({
                       <div className="px-4 py-3.5 border-b border-zinc-800/80">
                         <div className="flex items-center gap-3">
                           <span className={isAdmin ? "avatar-ring-admin shrink-0" : "avatar-ring-user shrink-0"}>
-                            {user?.avatar ? (
-                              <img src={user.avatar} alt="Avatar" className="w-10 h-10 rounded-full object-cover block" />
+                            {displayUser?.avatar ? (
+                              <img src={displayUser.avatar} alt="Avatar" className="w-10 h-10 rounded-full object-cover block" />
                             ) : (
                               <div className={`w-10 h-10 rounded-full flex items-center justify-center text-white text-sm font-bold ${isAdmin ? "bg-purple-600" : "bg-amber-500"}`}>
                                 {initials}
@@ -256,8 +344,8 @@ export default function Header({
                             )}
                           </span>
                           <div className="min-w-0">
-                            <p className="text-sm font-semibold text-white truncate">{user?.name || "User"}</p>
-                            <p className="text-xs text-zinc-500 truncate">{user?.email || ""}</p>
+                            <p className="text-sm font-semibold text-white truncate">{displayUser?.name || "User"}</p>
+                            <p className="text-xs text-zinc-500 truncate">{displayUser?.email || ""}</p>
                           </div>
                         </div>
                         {isAdmin && (
@@ -273,10 +361,12 @@ export default function Header({
                           <User size={15} className="text-zinc-500 shrink-0" />
                           {isAdmin ? "Profile & App Settings" : "View Profile"}
                         </button>
-                        <button onClick={openSettingsModal} className="dd-item w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-zinc-300 hover:text-white text-sm">
-                          <Settings size={15} className="text-zinc-500 shrink-0" />
-                          Settings
-                        </button>
+                        {!isAdmin && (
+                          <button onClick={openSettingsModal} className="dd-item w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-zinc-300 hover:text-white text-sm">
+                            <Settings size={15} className="text-zinc-500 shrink-0" />
+                            Settings
+                          </button>
+                        )}
                       </div>
 
                       <div className="p-1.5 border-t border-zinc-800/80">

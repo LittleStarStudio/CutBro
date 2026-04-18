@@ -7,6 +7,9 @@ use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Support\Carbon;
 use DateTimeInterface;
 
+use App\Models\RefundRequest;
+use App\Models\BarbershopRating;
+
 class Booking extends Model
 {
     use SoftDeletes;
@@ -67,6 +70,16 @@ class Booking extends Model
     public function payment()
     {
         return $this->hasOne(Payment::class);
+    }
+
+    public function refundRequest()
+    {
+        return $this->hasOne(RefundRequest::class, 'booking_id');
+    }
+
+    public function rating()
+    {
+        return $this->hasOne(BarbershopRating::class);
     }
 
 }

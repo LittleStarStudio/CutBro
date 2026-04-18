@@ -1,23 +1,27 @@
 // File: src/components/profile/AdminProfileModal.tsx
 import { useState, useEffect, useMemo } from "react";
-import { Upload, Eye, EyeOff, Image, Type, Save, X, CheckCircle, AlertCircle } from "lucide-react";
+import { Upload, Eye, EyeOff, Image, Type, Save, X, CheckCircle, AlertCircle, Globe } from "lucide-react";
 import Modal from "@/components/admin/Modal";
 
 export type AdminProfile = {
   name: string;
   email: string;
+  photoFile?: File;
   photoPreview: string;
   password?: string;
   confirmPassword?: string;
   appLogo?: string;
   appName?: string;
+  appWebsite?: string;  
+  logoFileObj?: File;   
 };
+
 
 interface Props {
   open: boolean;
   onClose: () => void;
   data: AdminProfile;
-  onSave: (data: AdminProfile) => void;
+  onSave: (data: AdminProfile) => Promise<void>;
 }
 
 // ─── Success Modal ────────────────────────────────────────────────────────────
@@ -68,25 +72,34 @@ function FieldWarning({ message }: { message: string }) {
 export default function AdminProfileModal({ open, onClose, data, onSave }: Props) {
   const [form, setForm]                               = useState<AdminProfile>(data);
   const [photoFile, setPhotoFile]                     = useState<string | null>(null);
+  const [photoFileObj, setPhotoFileObj]               = useState<File | null>(null);
+  const [saving, setSaving]                           = useState(false);
   const [logoFile, setLogoFile]                       = useState<string | null>(null);
+  const [logoFileObj, setLogoFileObj]                 = useState<File | null>(null);
   const [showPassword, setShowPassword]               = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [activeTab, setActiveTab]                     = useState<"profile" | "app">("profile");
   const [showSuccess, setShowSuccess]                 = useState(false);
   const [submitted, setSubmitted]                     = useState(false);
+  const [saveError,  setSaveError]                    = useState<string | null>(null);  
 
   useEffect(() => {
     if (open) {
       setForm({ ...data, password: "", confirmPassword: "" });
       setPhotoFile(null);
       setLogoFile(null);
+      setLogoFileObj(null);
       setActiveTab("profile");
       setSubmitted(false);
+      setSaveError(null);
+      setPhotoFileObj(null);
+      setSaving(false);
     }
   }, [open, data]);
 
   // ── Detect changes ─────────────────────────────────────────────────────────
   const hasChanges = useMemo(() => {
+    if (form.appWebsite !== data.appWebsite) return true;
     if (photoFile || logoFile) return true;
     if (form.name !== data.name) return true;
     if (form.appName !== data.appName) return true;
@@ -127,6 +140,7 @@ export default function AdminProfileModal({ open, onClose, data, onSave }: Props
   const handlePhotoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
+      setPhotoFileObj(file);
       const reader = new FileReader();
       reader.onloadend = () => setPhotoFile(reader.result as string);
       reader.readAsDataURL(file);
@@ -136,27 +150,40 @@ export default function AdminProfileModal({ open, onClose, data, onSave }: Props
   const handleLogoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
+      setLogoFileObj(file);
       const reader = new FileReader();
       reader.onloadend = () => setLogoFile(reader.result as string);
       reader.readAsDataURL(file);
     }
   };
 
-  const handleSave = () => {
+  const handleSave = async () => {
     setSubmitted(true);
     if (!hasChanges || !isValid) return;
 
     const updatedData: AdminProfile = {
       ...form,
       photoPreview: photoFile || form.photoPreview,
+      photoFile: photoFileObj ?? undefined,
       appLogo: logoFile || form.appLogo,
+      logoFileObj: logoFileObj ?? undefined,
     };
     if (!form.password) {
       delete updatedData.password;
       delete updatedData.confirmPassword;
     }
-    onSave(updatedData);
-    setShowSuccess(true);
+
+    setSaving(true);
+    setSaveError(null);
+    try {
+      await onSave(updatedData);
+      setShowSuccess(true);
+    } catch {
+      setSaveError("Failed to save. Please check your connection and try again.");
+    } finally {
+      setSaving(false);
+    }
+
   };
 
   const handleSuccessClose = () => {
@@ -210,15 +237,28 @@ export default function AdminProfileModal({ open, onClose, data, onSave }: Props
                 </div>
               )}
 
+              {saveError && (
+                <div className="flex items-start gap-2.5 p-3 bg-red-500/10 border border-red-500/40 rounded-lg">
+                  <AlertCircle className="w-4 h-4 text-red-400 flex-shrink-0 mt-0.5" />
+                  <p className="text-xs text-red-400">{saveError}</p>
+                </div>
+              )}
+
               {/* Photo Upload */}
               <div className="flex flex-col items-center gap-4 p-5 bg-zinc-800/50 rounded-xl border border-zinc-700">
                 <div className="relative group">
                   <div className="absolute inset-0 bg-gradient-to-r from-amber-500 to-amber-500 rounded-full blur-xl opacity-20 group-hover:opacity-40 transition-opacity" />
-                  <img
-                    src={photoFile || form.photoPreview || "/default-avatar.png"}
-                    alt="Profile"
-                    className="relative w-24 h-24 rounded-full object-cover border-4 border-amber-500/40 shadow-lg"
-                  />
+                  {photoFile || form.photoPreview ? (
+                    <img
+                      src={photoFile || form.photoPreview}
+                      alt="Profile"
+                      className="relative w-24 h-24 rounded-full object-cover border-4 border-amber-500/40 shadow-lg"
+                    />
+                  ) : (
+                    <div className="relative w-24 h-24 rounded-full border-4 border-amber-500/40 shadow-lg bg-purple-600 flex items-center justify-center text-white font-bold text-3xl select-none">
+                      {form.name ? form.name.split(" ").map((n) => n[0]).join("").toUpperCase().slice(0, 2) : "A"}
+                    </div>
+                  )}
                   <div className="absolute inset-0 rounded-full bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
                     <Upload size={16} className="text-white" />
                   </div>
@@ -229,6 +269,7 @@ export default function AdminProfileModal({ open, onClose, data, onSave }: Props
                     <Upload size={14} />
                     Upload Photo
                   </div>
+                  <p className="text-xs text-zinc-500 mt-1">JPG, PNG or GIF • Max 5MB</p>
                 </label>
               </div>
 
@@ -335,6 +376,13 @@ export default function AdminProfileModal({ open, onClose, data, onSave }: Props
                 </div>
               )}
 
+              {saveError && (
+                <div className="flex items-start gap-2.5 p-3 bg-red-500/10 border border-red-500/40 rounded-lg">
+                  <AlertCircle className="w-4 h-4 text-red-400 flex-shrink-0 mt-0.5" />
+                  <p className="text-xs text-red-400">{saveError}</p>
+                </div>
+              )}
+
               {/* App Logo */}
               <div>
                 <label className="block text-sm font-semibold text-zinc-300 mb-3 flex items-center gap-2">
@@ -379,6 +427,22 @@ export default function AdminProfileModal({ open, onClose, data, onSave }: Props
                 <p className="text-xs text-zinc-500 mt-1">Shown in header, browser tab, and emails</p>
               </div>
 
+              {/* App Website */}
+              <div>
+                <label className="block text-sm font-semibold text-zinc-300 mb-1.5 flex items-center gap-2">
+                  <Globe size={14} className="text-amber-400" />
+                  App Website
+                </label>
+                <input
+                  type="url"
+                  className="w-full p-3 rounded-lg bg-zinc-800 border-2 border-zinc-700 text-white placeholder-zinc-500 focus:border-amber-500 focus:outline-none transition-colors"
+                  value={form.appWebsite || ""}
+                  onChange={(e) => setForm((p) => ({ ...p, appWebsite: e.target.value }))}
+                  placeholder="https://cutbro.com"
+                />
+                <p className="text-xs text-zinc-500 mt-1">URL website aplikasi</p>
+              </div>
+
             </div>
           )}
 
@@ -393,15 +457,15 @@ export default function AdminProfileModal({ open, onClose, data, onSave }: Props
             </button>
             <button
               onClick={handleSave}
-              disabled={!hasChanges}
+              disabled={!hasChanges || saving}
               className={`flex-1 px-4 py-2.5 rounded-lg font-bold transition-colors flex items-center justify-center gap-2 text-sm shadow-lg ${
-                hasChanges
+                hasChanges && !saving
                   ? "bg-amber-500 hover:bg-amber-600 text-white shadow-amber-500/20 cursor-pointer"
                   : "bg-zinc-700 text-zinc-500 cursor-not-allowed"
               }`}
             >
               <Save size={15} />
-              Save Changes
+              {saving ? "Saving..." : "Save Changes"}
             </button>
           </div>
 

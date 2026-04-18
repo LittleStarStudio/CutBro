@@ -5,7 +5,10 @@ namespace App\Services;
 use App\Models\Barber;
 use App\Models\User;
 use App\Models\Role;
+
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
+
 
 class BarberService
 {
@@ -16,36 +19,60 @@ class BarberService
 
     public function create(array $data, $owner)
     {
-        // ambil role barber
-        $role = Role::where('name', 'barber')->firstOrFail();
+        return DB::transaction(function () use ($data, $owner) {
+            // ambil role barber
+            $role = Role::where('name', 'barber')->firstOrFail();
 
-        // buat user baru
-        $user = User::create([
-            'name' => $data['name'],
-            'email' => $data['email'],
-            'password' => Hash::make($data['password']),
-            'role_id' => $role->id,
-            'barbershop_id' => $owner->barbershop_id,
-            'email_verified_at' => now(),
-        ]);
+            // buat user baru
+            $user = User::create([
+                'name'              => $data['name'],
+                'email'             => $data['email'],
+                'password'          => Hash::make($data['password']),
+                'role_id'           => $role->id,
+                'barbershop_id'     => $owner->barbershop_id,
+                'email_verified_at' => now(),
+            ]);
 
-        // buat barber profile
-        return Barber::create([
-            'user_id' => $user->id,
-            'bio' => $data['bio'] ?? null,
-            'photo_url' => $data['photo_url'] ?? null,
-            'created_by_owner_id' => $owner->id,
-        ]);
+            // buat barber profile
+            return Barber::create([
+                'user_id'             => $user->id,
+                'bio'                 => $data['bio'] ?? null,
+                'photo_url'           => $data['photo_url'] ?? null,
+                'created_by_owner_id' => $owner->id,
+            ]);
+        });
     }
 
     public function update(Barber $barber, array $data)
     {
-        $barber->update($data);
+        // Update user fields (name, email) if provided
+        $userFields = array_filter([
+            'name'     => $data['name']     ?? null,
+            'email'    => $data['email']    ?? null,
+            'password' => isset($data['password']) && $data['password']
+                            ? Hash::make($data['password'])
+                            : null,
+        ], fn($v) => $v !== null);
+
+        if (!empty($userFields) && $barber->user) {
+            $barber->user->update($userFields);
+        }
+
+        // Update barber fields only
+        $barber->update(array_intersect_key($data, array_flip(['bio', 'photo_url', 'status'])));
+
         return $barber->fresh()->load('user');
     }
 
     public function delete(Barber $barber)
     {
+        if ($barber->user) {
+            // Free up the email so it can be reused after soft-delete
+            $barber->user->update([
+                'email' => $barber->user->email . '_deleted_' . now()->timestamp,
+            ]);
+            $barber->user->delete();
+        }
         $barber->delete();
     }
 }

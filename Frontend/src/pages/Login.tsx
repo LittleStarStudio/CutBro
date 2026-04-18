@@ -1,31 +1,19 @@
 import { useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
-import { Mail, AlertCircle, X } from "lucide-react";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
+import { Mail, AlertCircle, X, MailCheck } from "lucide-react";
+import axios from "axios";
 
 import Button from "@/components/ui/Button";
+import GoogleButton from "@/components/auth/GoogleButton";
+import Divider from "@/components/auth/Divider";
 import AuthLayout from "@/components/auth/AuthLayout";
 import FormInput from "@/components/auth/FormInput";
 import PasswordInput from "@/components/auth/PasswordInput";
 
-import { login, getRoleDashboard, type User } from "@/lib/auth";
-
-/* ================= DUMMY ACCOUNTS ================= */
-// Akun valid untuk testing:
-// ┌──────────────────────────┬─────────────┬──────────┐
-// │ Email                    │ Password    │ Role     │
-// ├──────────────────────────┼─────────────┼──────────┤
-// │ customer@example.com     │ password123 │ customer │
-// │ admin@example.com        │ password123 │ admin    │
-// │ owner@example.com        │ password123 │ owner    │
-// │ barber@example.com       │ password123 │ barber   │
-// └──────────────────────────┴─────────────┴──────────┘
-
-const DUMMY_ACCOUNTS: { email: string; password: string; role: User["role"] }[] = [
-  { email: "customer@example.com", password: "password123", role: "customer" },
-  { email: "admin@example.com",    password: "password123", role: "admin"    },
-  { email: "owner@example.com",    password: "password123", role: "owner"    },
-  { email: "barber@example.com",   password: "password123", role: "barber"   },
-];
+import { login as apiLogin } from "@/services/auth.service";
+import { useAuth } from "@/components/context/AuthContext";
+import { checkoutPlan } from "@/services/owner.service";
+import { getRoleDashboard } from "@/lib/auth";
 
 /* ================= ERROR BANNER ================= */
 function ErrorBanner({ message, onClose }: { message: string; onClose: () => void }) {
@@ -44,72 +32,98 @@ function ErrorBanner({ message, onClose }: { message: string; onClose: () => voi
   );
 }
 
+/* ================= INFO BANNER ================= */
+function InfoBanner({ message, onClose }: { message: string; onClose: () => void }) {
+  return (
+    <div className="flex items-start gap-3 px-4 py-3 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-400 animate-in fade-in slide-in-from-top-2 duration-300">
+      <MailCheck className="w-5 h-5 mt-0.5 shrink-0" />
+      <p className="text-sm flex-1">{message}</p>
+      <button
+        type="button"
+        onClick={onClose}
+        className="text-amber-400/60 hover:text-amber-400 transition-colors shrink-0"
+      >
+        <X className="w-4 h-4" />
+      </button>
+    </div>
+  );
+}
+
 /* ================= MAIN COMPONENT ================= */
 export default function Login() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const { setUser } = useAuth();
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
+  const handleGoogleLogin = () => {
+    window.location.href = `${import.meta.env.VITE_API_BASE_URL}/auth/google/redirect`;
+  };
   const [error, setError] = useState<string | null>(null);
+  const [info, setInfo] = useState<string | null>(
+    searchParams.get("registered") === "true"
+      ? "Registration successful! Please check your email and verify your account before logging in."
+      : searchParams.get("error") === "google_failed"
+      ? "Google login failed. Please try again or use email & password."
+      : searchParams.get("error")?.startsWith("account_")
+      ? "Your account is not active. Please contact support."
+      : null
+  );
 
-  const onSubmit = async (e: React.FormEvent) => {
+  const onSubmit = async (e: { preventDefault(): void }) => {
     e.preventDefault();
     setLoading(true);
     setError(null);
 
     try {
-      // ── 1. Validasi format ──
-      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-      const isValidFormat = emailRegex.test(email.trim());
-      const isPasswordLongEnough = password.length >= 8;
+      const user = await apiLogin({ email: email.trim(), password });
+      setUser(user);
 
-      if (!isValidFormat && !isPasswordLongEnough) {
-        setError("Invalid email address and password. Please check your credentials and try again.");
-        return;
-      }
-      if (!isValidFormat) {
-        setError("Invalid email address. Please enter a valid email.");
-        return;
-      }
-      if (!isPasswordLongEnough) {
-        setError("Password must be at least 8 characters.");
-        return;
-      }
+      const chosenPlanId   = sessionStorage.getItem("chosen_plan_id");
+      const chosenPlanName = sessionStorage.getItem("chosen_plan_name");
 
-      // ── 2. Simulasi delay network ──
-      await new Promise((r) => setTimeout(r, 800));
-
-      // ── 3. Cek dummy accounts ──
-      const matched = DUMMY_ACCOUNTS.find(
-        (acc) =>
-          acc.email.toLowerCase() === email.trim().toLowerCase() &&
-          acc.password === password
-      );
-
-      if (!matched) {
-        const emailExists = DUMMY_ACCOUNTS.some(
-          (acc) => acc.email.toLowerCase() === email.trim().toLowerCase()
-        );
-
-        if (emailExists) {
-          setError("Incorrect password. Please try again.");
+      if (chosenPlanId && user.role === "owner") {
+        if (chosenPlanName === "free") {
+          try {
+            await checkoutPlan(Number(chosenPlanId));
+          } catch { /* silently fail — owner tetap masuk dashboard */ }
+          sessionStorage.removeItem("chosen_plan_id");
+          sessionStorage.removeItem("chosen_plan_name");
+          sessionStorage.removeItem("chosen_plan_display_name");
+          sessionStorage.removeItem("chosen_plan_price");
+          navigate("/owner", { replace: true });
         } else {
-          setError("No account found with this email address.");
+          navigate("/subscription/pay", { replace: true });
         }
-        return;
+      } else {
+        navigate(getRoleDashboard(user.role), { replace: true });
       }
 
-      // ── 4. Login sukses ──
-      const user: User = {
-        name: matched.email.split("@")[0],
-        email: matched.email,
-        role: matched.role,
-        avatar: undefined
-      };
+    } catch (err) {
+      if (axios.isAxiosError(err)) {
+        const status = err.response?.status;
+        const message = err.response?.data?.message;
 
-      login(user);
-      navigate(getRoleDashboard(user.role), { replace: true });
+        if (!err.response) {
+          setError("Cannot connect to server. Please check your connection.");
+        } else if (status === 401) {
+          setError("Email or password is incorrect.");
+        } else if (status === 403) {
+          setError(message ?? "Your account is not allowed to login.");
+        } else if (status === 423) {
+          setError(message ?? "Your account is temporarily locked. Please try again later.");
+        } else if (status === 422) {
+          const errors = err.response?.data?.errors;
+          const first = errors ? Object.values(errors).flat()[0] : message;
+          setError(typeof first === "string" ? first : "Please check your input.");
+        } else {
+          setError("Something went wrong. Please try again.");
+        }
+      } else {
+        setError("Cannot connect to server. Please check your connection.");
+      }
     } finally {
       setLoading(false);
     }
@@ -117,7 +131,16 @@ export default function Login() {
 
   return (
     <AuthLayout title="Sign In" subtitle="" selectedRole={null} onBack={() => {}}>
+
+      <GoogleButton onClick={handleGoogleLogin} text="Continue with Google" />
+      <Divider />
+      
       <form onSubmit={onSubmit} className="space-y-6" noValidate>
+
+        {/* Info Banner — verifikasi email setelah register */}
+        {info && (
+          <InfoBanner message={info} onClose={() => setInfo(null)} />
+        )}
 
         {/* Error Banner */}
         {error && (
@@ -130,9 +153,9 @@ export default function Login() {
           type="text"
           inputMode="email"
           autoComplete="email"
-          placeholder="customer@example.com"
+          placeholder="you@example.com"
           value={email}
-          onChange={(e) => { setEmail(e.target.value); setError(null); }}
+          onChange={(e) => setEmail(e.target.value)}
         />
 
         <div className="space-y-2">
@@ -140,7 +163,7 @@ export default function Login() {
             label="Password"
             placeholder="Enter your password"
             value={password}
-            onChange={(e) => { setPassword(e.target.value); setError(null); }}
+            onChange={(e) => setPassword(e.target.value)}
           />
 
           <div className="text-right">
@@ -151,7 +174,7 @@ export default function Login() {
         </div>
 
         <Button type="submit" className="w-full" disabled={loading}>
-          {loading ? "Processing..." : "Login"}
+          {loading ? "Signing in..." : "Login"}
         </Button>
 
         <p className="text-center text-sm text-neutral-400">

@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import { Fragment, type ReactNode } from "react";
 
 interface MobileCardField {
   label: string;
@@ -44,12 +44,13 @@ export default function MobileCard({
 
       {/* Fields */}
       {fields.length > 0 && (
-        <div className="text-xs text-[#B8B8B8] space-y-1 pt-2">
+        <div className="text-xs text-[#B8B8B8] pt-2 grid grid-cols-[auto_auto_1fr] gap-x-2 gap-y-1.5 items-center">
           {fields.map((field, index) => (
-            <p key={index}>
-              <span className="text-white font-medium">{field.label}:</span>{" "}
-              {field.value}
-            </p>
+            <Fragment key={index}>
+              <span className="text-white font-medium whitespace-nowrap">{field.label}</span>
+              <span className="text-white font-medium">:</span>
+              <span className="min-w-0">{field.value}</span>
+            </Fragment>
           ))}
         </div>
       )}

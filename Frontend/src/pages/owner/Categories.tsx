@@ -1,9 +1,11 @@
 import DashboardLayout from "@/components/dashboard/DashboardLayout";
 import { useState, useEffect, useMemo } from "react";
-import { Tag, Plus } from "lucide-react";
+import { Tag, Plus, Layers, CheckCircle, XCircle } from "lucide-react";
+import StatCard from "@/components/admin/StatsCard";
 
 import { ownerLogo, ownerMenu } from "@/components/config/Menu";
-import { logout, getUser } from "@/lib/auth";
+import { useAuth } from "@/components/context/AuthContext";
+import * as ownerService from "@/services/owner.service";
 
 import { searchInObject } from "@/lib/utils/AdminUtils";
 
@@ -27,17 +29,9 @@ interface Category {
   status: "active" | "inactive";
 }
 
-/* ================= DUMMY DATA ================= */
-const DUMMY_CATEGORIES: Category[] = [
-  { id: 1, categoryName: "Haircut",   serviceCount: 2, status: "active"   },
-  { id: 2, categoryName: "Grooming",  serviceCount: 1, status: "active"   },
-  { id: 3, categoryName: "Coloring",  serviceCount: 1, status: "inactive" },
-  { id: 4, categoryName: "Treatment", serviceCount: 1, status: "active"   },
-  { id: 5, categoryName: "Package",   serviceCount: 1, status: "inactive" },
-];
-
 export default function OwnerCategories() {
   const toast = useToast();
+  const { user, logout } = useAuth();
 
   const [categories, setCategories]   = useState<Category[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
@@ -48,14 +42,30 @@ export default function OwnerCategories() {
   const [selectedCategory, setSelectedCategory] = useState<Category | null>(null);
   const [isLoading, setIsLoading]               = useState(false);
 
-  const currentUser = getUser();
+  const loadCategories = () => {
+    ownerService.getCategories().then((data) => {
+      setCategories(data.map((c) => ({
+        id:           c.id,
+        categoryName: c.name,
+        serviceCount: c.services_count ?? 0,
+        status:       c.is_active ? "active" : "inactive",
+      })));
+    }).catch(() => {});
+  };
 
-  useEffect(() => { setCategories(DUMMY_CATEGORIES); }, []);
+  useEffect(() => { loadCategories(); }, []);
 
   /* ================= FILTER ================= */
   const filteredCategories = useMemo(() => {
     return categories.filter((cat) => searchInObject(cat, searchQuery, ["categoryName"]));
   }, [categories, searchQuery]);
+
+  /* ================= STATS CARD ================= */
+  const stats = useMemo(() => ({
+    total:    categories.length,
+    active:   categories.filter((c) => c.status === "active").length,
+    inactive: categories.filter((c) => c.status === "inactive").length,
+  }), [categories]);
 
   /* ================= FORM FIELDS ================= */
   const formFields: FormField[] = [
@@ -85,13 +95,13 @@ export default function OwnerCategories() {
   const handleSaveAdd = async (data: Record<string, any>) => {
     setIsLoading(true);
     try {
-      await new Promise((resolve) => setTimeout(resolve, 1200));
-      const newId = Math.max(...categories.map((c) => c.id), 0) + 1;
-      setCategories((prev) => [...prev, { id: newId, categoryName: data.categoryName, serviceCount: 0, status: data.status }]);
+      await ownerService.createCategory({ name: data.categoryName, is_active: data.status === "active" });
+      loadCategories();
       setShowAddModal(false);
       toast.success("Category Added", `${data.categoryName} has been added successfully.`);
-    } catch {
-      toast.error("Add Failed", "Something went wrong. Please try again.");
+    } catch (err: any) {
+      const msg = err?.response?.data?.message ?? "Something went wrong. Please try again.";
+      toast.error("Add Failed", msg);
     } finally {
       setIsLoading(false);
     }
@@ -104,19 +114,20 @@ export default function OwnerCategories() {
   };
 
   const handleSaveEdit = async (data: Record<string, any>) => {
+    if (!selectedCategory) return;
     setIsLoading(true);
     try {
-      await new Promise((resolve) => setTimeout(resolve, 1200));
-      setCategories((prev) =>
-        prev.map((cat) =>
-          cat.id === selectedCategory?.id ? { ...cat, categoryName: data.categoryName, status: data.status } : cat
-        )
-      );
+      await ownerService.updateCategory(selectedCategory.id, {
+        name:      data.categoryName,
+        is_active: data.status === "active",
+      });
+      loadCategories();
       setShowEditModal(false);
       toast.success("Category Updated", `${data.categoryName} has been updated successfully.`);
       setSelectedCategory(null);
-    } catch {
-      toast.error("Update Failed", "Something went wrong. Please try again.");
+    } catch (err: any) {
+      const msg = err?.response?.data?.message ?? "Something went wrong. Please try again.";
+      toast.error("Update Failed", msg);
     } finally {
       setIsLoading(false);
     }
@@ -128,14 +139,22 @@ export default function OwnerCategories() {
     setShowDeleteModal(true);
   };
 
-  const handleConfirmDelete = () => {
+  const handleConfirmDelete = async () => {
     if (!selectedCategory) return;
     const name = selectedCategory.categoryName;
-    setCategories((prev) => prev.filter((c) => c.id !== selectedCategory.id));
-    setShowDeleteModal(false);
-    setSelectedCategory(null);
-    toast.success("Category Deleted", `${name} has been removed.`);
-  };
+    try {
+      await ownerService.deleteCategory(selectedCategory.id);
+      loadCategories();
+      setShowDeleteModal(false);
+      setSelectedCategory(null);
+      toast.success("Category Deleted", `${name} has been removed.`);
+    } catch (err: any) {
+      const msg = err?.response?.data?.message ?? "Something went wrong. Please try again.";
+      toast.error("Delete Failed", msg);
+      setShowDeleteModal(false);
+      setSelectedCategory(null);
+    }
+  }
 
   const handleCancelDelete = () => {
     setShowDeleteModal(false);
@@ -144,15 +163,6 @@ export default function OwnerCategories() {
 
   /* ================= TABLE COLUMNS ================= */
   const columns = [
-    {
-      key: "no",
-      header: "No",
-      headerClassName: "text-left w-16",
-      render: (cat: Category) => {
-        const index = filteredCategories.findIndex((c) => c.id === cat.id);
-        return <span className="text-[#B8B8B8]">{index + 1}</span>;
-      },
-    },
     { key: "categoryName", header: "Category Name", render: (cat: Category) => <span className="text-white font-semibold">{cat.categoryName}</span> },
     {
       key: "serviceCount",
@@ -175,8 +185,8 @@ export default function OwnerCategories() {
     {
       key: "actions",
       header: "Actions",
-      headerClassName: "text-right",
-      className: "text-right",
+      headerClassName: "text-center",
+      className: "text-center",
       render: (cat: Category) => (
         <ActionButtons actions={[
           { type: "edit",   onClick: () => handleEditClick(cat)   },
@@ -193,13 +203,20 @@ export default function OwnerCategories() {
       showSidebar
       menuItems={ownerMenu}
       logo={ownerLogo}
-      userProfile={currentUser ?? { name: "owner", email: "owner@cutbro.com", role: "owner" }}
+      userProfile={user ?? { name: "owner", email: "owner@cutbro.com", role: "owner" }}
       showNotification
       notificationCount={3}
       onLogout={logout}
     >
       <div className="w-full space-y-6 lg:space-y-8">
         <PageHeader actionButton={{ label: "Add Category", onClick: handleAddClick, icon: Plus }} title={""} />
+
+        {/* Stats Cards */}
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 lg:gap-6">
+          <StatCard icon={Layers}      title="Total Categories" value={stats.total}    />
+          <StatCard icon={CheckCircle} title="Active"           value={stats.active}   iconBgColor="bg-emerald-500/10" iconColor="text-emerald-400" />
+          <StatCard icon={XCircle}     title="Inactive"         value={stats.inactive} iconBgColor="bg-zinc-700/50"    iconColor="text-zinc-400" />
+        </div>
 
         <TableCard
           searchQuery={searchQuery}
@@ -213,21 +230,18 @@ export default function OwnerCategories() {
           <DataTable data={filteredCategories} columns={columns} />
           <MobileCardList
             data={filteredCategories}
-            renderCard={(cat: Category) => {
-              const index = filteredCategories.findIndex((c) => c.id === cat.id);
-              return (
-                <MobileCard
-                  title={<div><p className="text-xs text-[#B8B8B8] mb-1">#{index + 1}</p><p className="font-semibold text-white">{cat.categoryName}</p></div>}
-                  headerRight={
-                    <span className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-medium ${cat.status === "active" ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20" : "bg-zinc-700/50 text-zinc-400 border border-zinc-600"}`}>
-                      {cat.status === "active" ? "Active" : "Inactive"}
-                    </span>
-                  }
-                  fields={[{ label: "Services", value: <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-[#D4AF37]/10 text-[#D4AF37] border border-[#D4AF37]/20">{cat.serviceCount} service{cat.serviceCount !== 1 ? "s" : ""}</span> }]}
-                  actions={<ActionButtons actions={[{ type: "edit", onClick: () => handleEditClick(cat) }, { type: "delete", onClick: () => handleDeleteClick(cat) }]} />}
-                />
-              );
-            }}
+            renderCard={(cat: Category) => (
+              <MobileCard
+                title={<p className="font-semibold text-white">{cat.categoryName}</p>}
+                headerRight={
+                  <span className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-medium ${cat.status === "active" ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20" : "bg-zinc-700/50 text-zinc-400 border border-zinc-600"}`}>
+                    {cat.status === "active" ? "Active" : "Inactive"}
+                  </span>
+                }
+                fields={[{ label: "Services", value: <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-[#D4AF37]/10 text-[#D4AF37] border border-[#D4AF37]/20">{cat.serviceCount} service{cat.serviceCount !== 1 ? "s" : ""}</span> }]}
+                actions={<div className="flex justify-end"><ActionButtons actions={[{ type: "edit", onClick: () => handleEditClick(cat) }, { type: "delete", onClick: () => handleDeleteClick(cat) }]} /></div>}
+              />
+            )}
           />
         </TableCard>
       </div>

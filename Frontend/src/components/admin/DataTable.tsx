@@ -79,10 +79,13 @@ export default function DataTable<T extends { id: number | string }>({
       {!hidePagination && (
         <div className="flex items-center justify-between px-4 py-3 border-t border-[#2A2A2A] mt-2">
           <p className="text-xs text-[#B8B8B8]">
-            Menampilkan{" "}
+            Showing{" "}
             <span className="text-white font-medium">
               {totalItems === 0 ? 0 : startIndex + 1}–{endIndex}
             </span>
+            {" "}of{" "}
+            <span className="text-white font-medium">{totalItems}</span>
+            {" "}data
           </p>
 
           <div className="flex items-center gap-1">

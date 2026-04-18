@@ -16,10 +16,10 @@ export const STATUS_FILTER_OPTIONS = [
 ];
 
 // Badge Styles for Plans
-export const PLAN_STYLES: Record<string, "default" | "primary" | "success" | "warning" | "danger" | "gold"> = {
-  Free: "default",
-  Pro: "primary",
-  Premium: "gold",
+export const PLAN_STYLES: Record<string, "default" | "primary" | "success" | "warning" | "danger" | "gold" | "purple"> = {
+  Free:    "primary",
+  Pro:     "warning",
+  Premium: "purple",
 };
 
 // Badge Styles for Status
@@ -61,10 +61,10 @@ export const USER_STATUS_FILTER_OPTIONS = [
 ];
 
 // Badge Styles for User Roles
-export const USER_ROLE_STYLES: Record<string, "default" | "primary" | "success" | "warning" | "danger" | "gold"> = {
+export const USER_ROLE_STYLES: Record<string, "default" | "primary" | "success" | "warning" | "danger" | "gold" | "purple"> = {
   customer: "primary",
-  barber: "success",
-  owner: "gold",
+  barber: "gold",
+  owner: "purple",
 };
 
 // Badge Styles for User Status
@@ -118,8 +118,8 @@ export const LOG_ACTION_FILTER_OPTIONS = [
 // Badge Styles for Log Actions
 export const LOG_ACTION_STYLES: Record<string, "default" | "primary" | "success" | "warning" | "danger" | "gold"> = {
   login: "success",
-  logout: "default",
-  register: "primary",
+  logout: "primary",
+  register: "gold",
 };
 
 // Log Status Filters

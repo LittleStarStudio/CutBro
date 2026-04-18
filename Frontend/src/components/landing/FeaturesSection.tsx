@@ -83,7 +83,7 @@ export function FeaturesSection() {
           <div className="inline-flex items-center gap-2 bg-amber-500/10 border border-amber-500/20 rounded-full px-5 py-2 mb-6">
             <div className="w-2 h-2 bg-amber-500 rounded-full animate-pulse" />
             <span className="text-amber-400 font-semibold text-sm uppercase tracking-wider">
-              Why BarberBook?
+              Why CutBro?
             </span>
           </div>
 

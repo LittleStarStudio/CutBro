@@ -12,7 +12,9 @@ class LoginLog extends Model
         'ip_address',
         'device',
         'status',
-        'reason'
+        'reason',
+        'action',
+        'location',
     ];
 
     // Relational tables

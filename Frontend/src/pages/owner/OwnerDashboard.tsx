@@ -1,8 +1,9 @@
-import { Calendar, DollarSign, Users, Scissors, TrendingUp, BarChart2, Award } from "lucide-react";
-import { useMemo } from "react";
+import { Calendar, DollarSign, Users, Scissors, TrendingUp, BarChart2, Award, AlertTriangle } from "lucide-react";
+import { useState, useEffect, useMemo } from "react";
+
 
 import { ownerLogo, ownerMenu } from "@/components/config/Menu";
-import { logout, getUser } from "@/lib/auth";
+import { useAuth } from "@/components/context/AuthContext";
 
 import StatsGrid from "@/components/admin/StatGrid";
 
@@ -16,23 +17,8 @@ import {
   CartesianGrid,
 } from "recharts";
 import DashboardLayout from "@/components/dashboard/DashboardLayout";
-
-/* ================= DUMMY DATA ================= */
-
-const MONTHLY_SALARY_DATA = [
-  { month: "Jan", amount: 15000000 },
-  { month: "Feb", amount: 18000000 },
-  { month: "Mar", amount: 16500000 },
-  { month: "Apr", amount: 22000000 },
-  { month: "May", amount: 25000000 },
-  { month: "Jun", amount: 23000000 },
-  { month: "Jul", amount: 27000000 },
-  { month: "Aug", amount: 26000000 },
-  { month: "Sep", amount: 29000000 },
-  { month: "Oct", amount: 31000000 },
-  { month: "Nov", amount: 28000000 },
-  { month: "Dec", amount: 33000000 },
-];
+import { getDashboard, getMySubscription, type DashboardData, type ActiveSubscription } from "@/services/owner.service";
+import { getUnreadCount } from "@/services/notification.service";
 
 /* ================= HELPERS ================= */
 
@@ -53,29 +39,52 @@ const CustomTooltip = ({ active, payload, label }: any) => {
 /* ================= COMPONENT ================= */
 
 export default function OwnerDashboard() {
-  const currentUser = getUser();
+  const { user, logout } = useAuth();
+
+  const [data, setData]       = useState<DashboardData | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+
+  const [subscription, setSubscription] = useState<ActiveSubscription | null>(null);
+  const [unreadCount, setUnreadCount] = useState(0);
+
+  useEffect(() => {
+    getDashboard()
+      .then(setData)
+      .catch(() => {}) // silently fail — halaman tetap render dengan data null
+      .finally(() => setIsLoading(false));
+  }, []);
+
+  useEffect(() => {
+    getMySubscription()
+      .then((res) => setSubscription(res.active_subscription))
+      .catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    getUnreadCount()
+      .then(r => setUnreadCount(r.data.data.count))
+      .catch(() => {});
+  }, []);
 
   const stats = useMemo(() => {
-    // ✅ Diganti: totalRevenue → totalBalance
-    const totalBalance = MONTHLY_SALARY_DATA.reduce((sum, m) => sum + m.amount, 0);
-    const current = MONTHLY_SALARY_DATA.at(-1)!;
-    const prev = MONTHLY_SALARY_DATA.at(-2)!;
-    const growth = ((current.amount - prev.amount) / prev.amount) * 100;
-    // ✅ Diganti: totalRevenue → totalBalance
-    const avgMonthly = totalBalance / MONTHLY_SALARY_DATA.length;
-    const bestMonth = MONTHLY_SALARY_DATA.reduce((max, data) =>
-      data.amount > max.amount ? data : max
+    if (!data) return null;
+
+    const monthly = data.monthly_salary;
+    const current = monthly.at(-1);
+    const prev    = monthly.at(-2);
+    const growth  = current && prev && prev.amount > 0
+      ? (((current.amount - prev.amount) / prev.amount) * 100).toFixed(1)
+      : "0.0";
+
+    const totalBalance = data.stats.total_balance;
+    const avgMonthly   = monthly.length ? Math.round(totalBalance / monthly.length) : 0;
+    const bestMonth    = monthly.reduce(
+      (max, d) => d.amount > max.amount ? d : max,
+      monthly[0] ?? { month: "-", amount: 0 }
     );
-    return {
-      totalBooking: 1247,
-      totalCustomer: 892,
-      totalBarber: 45,
-      totalBalance,         // ✅ Diganti
-      growth: growth.toFixed(1),
-      avgMonthly: Math.round(avgMonthly),
-      bestMonth,
-    };
-  }, []);
+
+    return { growth, avgMonthly, bestMonth, totalBalance };
+  }, [data]);
 
   return (
     <DashboardLayout
@@ -84,31 +93,66 @@ export default function OwnerDashboard() {
       showSidebar
       menuItems={ownerMenu}
       logo={ownerLogo}
-      userProfile={
-        currentUser ?? {
-          name: "owner",
-          email: "owner@cutbro.com",
-          role: "owner",
-        }
-      }
+      userProfile={user ?? { name: "owner", email: "owner@cutbro.com", role: "owner" }}
       showNotification
-      notificationCount={3}
+      notificationCount={unreadCount}
       onLogout={logout}
     >
       <div className="space-y-6 lg:space-y-8">
+
+        {/* ================= SUBSCRIPTION BANNER ================= */}
+        {subscription && subscription.expired_at && (() => {
+          const daysLeft = Math.ceil(
+            (new Date(subscription.expired_at).getTime() - Date.now()) / (1000 * 60 * 60 * 24)
+          );
+          if (daysLeft > 7) return null;
+
+          const isExpired = daysLeft <= 0;
+
+          return (
+            <div className={`flex items-start gap-3 px-4 py-3 rounded-xl border text-sm ${
+              isExpired
+                ? "bg-red-500/10 border-red-500/30 text-red-400"
+                : "bg-amber-500/10 border-amber-500/30 text-amber-400"
+            }`}>
+              <AlertTriangle className="w-5 h-5 shrink-0 mt-0.5" />
+              <div className="flex-1">
+                {isExpired ? (
+                  <>
+                    <span className="font-semibold">Your subscription has expired.</span>
+                    {" "}Some features may be limited.{" "}
+                  </>
+                ) : (
+                  <>
+                    <span className="font-semibold">
+                      Your {subscription.plan_label} plan expires in {daysLeft} day{daysLeft !== 1 ? "s" : ""}.
+                    </span>
+                    {" "}Renew now to avoid interruption.{" "}
+                  </>
+                )}
+                <button
+                  onClick={() => window.location.href = "/owner/subscription"}
+                  className="underline font-semibold hover:opacity-80 transition-opacity"
+                >
+                  Upgrade Plan →
+                </button>
+              </div>
+            </div>
+          );
+        })()}
 
         {/* ================= STATS ================= */}
         <StatsGrid
           columns={4}
           stats={[
-            { icon: Calendar,  title: "Total Booking",  value: stats.totalBooking.toLocaleString() },
-            { icon: Users,     title: "Total Customer", value: stats.totalCustomer.toLocaleString() },
-            { icon: Scissors,  title: "Total Barber",   value: stats.totalBarber },
+            { icon: Calendar,  title: "Total Booking",  value: isLoading ? "..." : (data?.stats.total_booking ?? 0).toLocaleString() },
+            { icon: Users,     title: "Total Customer", value: isLoading ? "..." : (data?.stats.total_customer ?? 0).toLocaleString() },
+            { icon: Scissors,  title: "Total Barber",   value: isLoading ? "..." : (data?.stats.total_barber ?? 0) },
             {
               icon: DollarSign,
-              title: "Total Balance",          // ✅ Diganti
-              value: formatM(stats.totalBalance),   // ✅ Diganti
-              trend: { value: `${stats.growth}% from last month`, isPositive: Number(stats.growth) >= 0 },
+              title: "Total Balance",
+              value: isLoading ? "..." : (stats ? formatM(stats.totalBalance) : "Rp 0"),
+              trend: stats ? { value: `${stats.growth}% from last month`, isPositive: Number(stats.growth) >= 0 } : undefined,
             },
           ]}
         />
@@ -127,7 +171,7 @@ export default function OwnerDashboard() {
 
           <div className="h-[400px]">
             <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={MONTHLY_SALARY_DATA}>
+              <LineChart data={data?.monthly_salary ?? []}>
                 <CartesianGrid stroke="#2A2A2A" strokeDasharray="3 3" />
                 <XAxis dataKey="month" stroke="#B8B8B8" style={{ fontSize: '12px' }} />
                 <YAxis stroke="#B8B8B8" tickFormatter={(v) => `${v / 1000000}M`} style={{ fontSize: '12px' }} />
@@ -145,37 +189,39 @@ export default function OwnerDashboard() {
           </div>
 
           {/* ================= SUMMARY ================= */}
-          <div className="mt-6 pt-6 border-t border-[#2A2A2A]">
-            <StatsGrid
-              columns={4}
-              stats={[
-                {
-                  icon: DollarSign,
-                  title: "Total Year",                  // ✅ Tetap "Total Year"
-                  value: formatM(stats.totalBalance),   // ✅ Hanya value yang diganti
-                },
-                {
-                  icon: Award,
-                  title: "Highest Month",
-                  value: `${stats.bestMonth.month} (${formatM(stats.bestMonth.amount)})`,
-                },
-                {
-                  icon: BarChart2,
-                  title: "Monthly Avg",
-                  value: formatM(stats.avgMonthly),
-                },
-                {
-                  icon: TrendingUp,
-                  title: "Growth",
-                  value: `${parseFloat(stats.growth) >= 0 ? "▲" : "▼"} ${stats.growth}%`,
-                  trend: {
-                    value: parseFloat(stats.growth) >= 0 ? "Positive growth" : "Negative growth",
-                    isPositive: parseFloat(stats.growth) >= 0,
+          {stats && (
+            <div className="mt-6 pt-6 border-t border-[#2A2A2A]">
+              <StatsGrid
+                columns={4}
+                stats={[
+                  {
+                    icon: DollarSign,
+                    title: "Total Year",
+                    value: formatM(stats.totalBalance),
                   },
-                },
-              ]}
-            />
-          </div>
+                  {
+                    icon: Award,
+                    title: "Highest Month",
+                    value: `${stats.bestMonth.month} (${formatM(stats.bestMonth.amount)})`,
+                  },
+                  {
+                    icon: BarChart2,
+                    title: "Monthly Avg",
+                    value: formatM(stats.avgMonthly),
+                  },
+                  {
+                    icon: TrendingUp,
+                    title: "Growth",
+                    value: `${parseFloat(stats.growth) >= 0 ? "▲" : "▼"} ${stats.growth}%`,
+                    trend: {
+                      value: parseFloat(stats.growth) >= 0 ? "Positive growth" : "Negative growth",
+                      isPositive: parseFloat(stats.growth) >= 0,
+                    },
+                  },
+                ]}
+              />
+            </div>
+          )}
 
         </div>
 

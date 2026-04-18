@@ -8,7 +8,7 @@ class ServiceCategoryService
 {
     public function getAll()
     {
-        return ServiceCategory::latest()->get();
+        return ServiceCategory::withCount('services')->latest()->get();
     }
 
     public function create(array $data)

@@ -12,6 +12,8 @@ import Register from "@/pages/Register";
 import PricingSection from "./pages/PricingSection";
 import ForgotPassword from "@/pages/ForgotPassword";
 import ResetPassword from "./pages/ResetPassword";
+import VerifyEmail from "@/pages/VerifyEmail";
+import GoogleCallback from "@/pages/GoogleCallback";
 
 import AdminDashboard from "@/pages/admin/AdminDashboard";
 import AdminBarbershops from "./pages/admin/Barbershops";
@@ -29,6 +31,7 @@ import OwnerPromos from "./pages/owner/Promos";
 import OwnerCustomers from "./pages/owner/Customer";
 import ReportSalary from "./pages/owner/ReportSallary";
 import Billing from "./pages/Billing";
+import SubscriptionPayment from "@/pages/SubscriptionPayment";
 
 import BarberDashboard from "@/pages/barber/BarberDashboard";
 import BarberBarbershops from "./pages/barber/MyWorkplace";
@@ -49,7 +52,6 @@ import { ToastProvider } from "@/components/ui/Toast";
 import BarberReport from "./pages/owner/ReportBarber";
 import UsersActivity from "./pages/admin/UserActivity";
 import SubscribePage from "./pages/admin/Subscribe";
-import AdminActivity from "./pages/admin/AdminActivity";
 import BarberActivityPage from "./pages/barber/MyHistory";
 import BarberSchedule from "./pages/barber/MyActivity";
 import BarberSchedulePage from "./pages/barber/MySchedule";
@@ -79,7 +81,10 @@ function AnimatedRoutes() {
         <Route path="/pricing" element={<PricingSection />} />
         <Route path="/forgot-password" element={<ForgotPassword />} />
         <Route path="/reset-password" element={<ResetPassword />} />
+        <Route path="/verify-email" element={<VerifyEmail />} />
+        <Route path="/auth/google/callback" element={<GoogleCallback />} />
         <Route path="/billing" element={<ProtectedRoute allow={["owner"]}><Billing /></ProtectedRoute>} />
+        <Route path="/subscription/pay" element={<ProtectedRoute allow={["owner"]}><SubscriptionPayment /></ProtectedRoute>} />
 
         <Route path="/notifications" element={<NotificationRouter />} />
 
@@ -91,9 +96,8 @@ function AnimatedRoutes() {
         <Route path="/admin/users" element={<ProtectedRoute allow={["admin"]}><Users /></ProtectedRoute>} />
         <Route path="/admin/login-logs" element={<ProtectedRoute allow={["admin"]}><LoginLogs /></ProtectedRoute>} />
         <Route path="/admin/users-activity" element={<ProtectedRoute allow={["admin"]}><UsersActivity /></ProtectedRoute>} />
-        <Route path="/admin/admin-activity" element={<ProtectedRoute allow={["admin"]}><AdminActivity /></ProtectedRoute>} />
         <Route path="/admin/reports/users" element={<ProtectedRoute allow={["admin"]}><ReportUsers /></ProtectedRoute>} />
-        <Route path="/admin/reports/revenue" element={<ProtectedRoute allow={["admin"]}><ReportRevenue /></ProtectedRoute>} />
+        <Route path="/admin/reports/salary" element={<ProtectedRoute allow={["admin"]}><ReportRevenue /></ProtectedRoute>} />
         <Route path="/admin/notifications" element={<ProtectedRoute allow={["admin"]}><NotificationRouter /></ProtectedRoute>} />
 
         {/* ===== OWNER ===== */}
@@ -104,14 +108,16 @@ function AnimatedRoutes() {
         <Route path="/owner/services" element={<ProtectedRoute allow={["owner"]}><OwnerServices /></ProtectedRoute>} />
         <Route path="/owner/categories" element={<ProtectedRoute allow={["owner"]}><OwnerCategories /></ProtectedRoute>} />
         <Route path="/owner/barbers" element={<ProtectedRoute allow={["owner"]}><OwnerBarbers /></ProtectedRoute>} />
-        <Route path="/owner/shift" element={<ProtectedRoute allow={["owner"]}><OwnerBarberShifts /></ProtectedRoute>} />
-        <Route path="/owner/shift-management" element={<ProtectedRoute allow={["owner"]}><ShiftManagement /></ProtectedRoute>} />
-        <Route path="/owner/schedule" element={<ProtectedRoute allow={["owner"]}><OwnerBarberScheduleMonitor /></ProtectedRoute>} />
-        <Route path="/owner/customers" element={<ProtectedRoute allow={["owner"]}><OwnerCustomers /></ProtectedRoute>} />
+        <Route path="/owner/barbers-work-shifts"    element={<ProtectedRoute allow={["owner"]}><ShiftManagement /></ProtectedRoute>} />
+        <Route path="/owner/barbers-management"     element={<ProtectedRoute allow={["owner"]}><OwnerBarbers /></ProtectedRoute>} />
+        <Route path="/owner/barbers-shift-schedule" element={<ProtectedRoute allow={["owner"]}><OwnerBarberShifts /></ProtectedRoute>} />
+        <Route path="/owner/barbers-attendance"     element={<ProtectedRoute allow={["owner"]}><OwnerBarberScheduleMonitor /></ProtectedRoute>} />
         <Route path="/owner/payment" element={<ProtectedRoute allow={["owner"]}><OwnerPayment /></ProtectedRoute>} />
         <Route path="/owner/promos" element={<ProtectedRoute allow={["owner"]}><OwnerPromos /></ProtectedRoute>} />
         <Route path="/owner/reports" element={<ProtectedRoute allow={["owner"]}><ReportSalary /></ProtectedRoute>} />
         <Route path="/owner/barber-report" element={<ProtectedRoute allow={["owner"]}><BarberReport /></ProtectedRoute>} />
+        <Route path="/owner/customers" element={<ProtectedRoute allow={["owner"]}><OwnerCustomers /></ProtectedRoute>} />
+
 
         {/* ===== BARBER ===== */}
         <Route path="/barber" element={<ProtectedRoute allow={["barber"]}><BarberDashboard /></ProtectedRoute>} />
@@ -123,7 +129,8 @@ function AnimatedRoutes() {
         {/* ===== CUSTOMER ===== */}
         <Route path="/customer" element={<ProtectedRoute allow={["customer"]}><CustomerDashboard /></ProtectedRoute>} />
         <Route path="/customer/booking/:id" element={<ProtectedRoute allow={["customer"]}><BookingDetail /></ProtectedRoute>} />
-        <Route path="/customer/booking" element={<ProtectedRoute allow={["customer"]}><CustomerBookings /></ProtectedRoute>} />
+        <Route path="/booking" element={<CustomerBookings />} />
+        <Route path="/customer/booking" element={<Navigate to="/booking" replace />} />
         <Route path="/customer/my-bookings" element={<ProtectedRoute allow={["customer"]}><MyBookings /></ProtectedRoute>} />
         <Route path="/customer/payment" element={<ProtectedRoute allow={["customer"]}><PaymentPage /></ProtectedRoute>} />
 

@@ -1,10 +1,11 @@
 import DashboardLayout from "@/components/dashboard/DashboardLayout";
 import { useState, useEffect, useMemo } from "react";
-import { Store, Crown, MapPin, Star, Users, TrendingUp } from "lucide-react";
+import { Store, Crown, MapPin, Star, Users, TrendingUp, X } from "lucide-react";
 
 import StatsGrid from "@/components/admin/StatGrid";
 import { superAdminLogo, superAdminMenu } from "@/components/config/Menu";
-import { logout, getUser } from "@/lib/auth";
+import { useAuth } from "@/components/context/AuthContext";
+import * as adminService from "@/services/admin.service";
 
 import type { Barbershop } from "@/type/AdminType";
 
@@ -34,50 +35,23 @@ import MobileCard from "@/components/admin/MobileCard";
 
 import { useToast } from "@/components/ui/Toast";
 
-/* ================= DUMMY DATA ================= */
+/* ================= HELPERS ================= */
 
-const DUMMY_BARBERSHOPS: Barbershop[] = [
-  {
-    id: 1,
-    name: "Classic Cuts",
-    owner: "John Doe",
-    location: "Jakarta Selatan",
-    plan: "Premium",
-    barbers: 8,
-    status: "active",
-    revenue: "Rp 12.5M",
-    rate: 4.8,
-  },
-  {
-    id: 2,
-    name: "Barber King",
-    owner: "Jane Smith",
-    location: "Bandung",
-    plan: "Pro",
-    barbers: 5,
-    status: "active",
-    revenue: "Rp 8.2M",
-    rate: 4.5,
-  },
-  {
-    id: 3,
-    name: "Pro Barber Shop",
-    owner: "Alice Brown",
-    location: "Surabaya",
-    plan: "Free",
-    barbers: 1,
-    status: "inactive",
-    revenue: "Rp 1.5M",
-    rate: 3.2,
-  },
-];
+function formatRevenue(amount: number): string {
+  if (amount >= 1_000_000) return `Rp ${(amount / 1_000_000).toFixed(1)}M`;
+  if (amount >= 1_000) return `Rp ${(amount / 1_000).toFixed(0)}K`;
+  return `Rp ${amount.toLocaleString("id-ID")}`;
+}
 
 /* ================= COMPONENT ================= */
 
 export default function Barbershops() {
   const toast = useToast();
+  const { user, logout } = useAuth();
 
   const [barbershops, setBarbershops] = useState<Barbershop[]>([]);
+  const [stats, setStats] = useState({ total: 0, free: 0, pro: 0, premium: 0 });
+
   const [searchQuery, setSearchQuery] = useState("");
   const [filterPlan, setFilterPlan] = useState<string>("all");
   const [filterStatus, setFilterStatus] = useState<string>("all");
@@ -86,25 +60,40 @@ export default function Barbershops() {
   const [showEditModal, setShowEditModal] = useState(false);
   const [selectedShop, setSelectedShop] = useState<Barbershop | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [showViewModal, setShowViewModal] = useState(false);
+  const [selectedViewShop, setSelectedViewShop] = useState<Barbershop | null>(null);
 
-  const currentUser = getUser();
+  /* ================= LOAD ================= */
 
-  /* ================= FETCH (DUMMY) ================= */
+  const loadStats = async () => {
+    try {
+      const data = await adminService.getBarbershopStats();
+      setStats(data);
+    } catch { /* silent */ }
+  };
 
-  useEffect(() => {
-    setBarbershops(DUMMY_BARBERSHOPS);
-  }, []);
+  const loadBarbershops = async () => {
+    try {
+      const result = await adminService.getAdminBarbershops();
+      setBarbershops(
+        result.data.map((s) => ({
+          id:       s.id,
+          name:     s.name,
+          owner:    s.owner,
+          location: s.location,
+          plan:     s.plan,
+          barbers:  s.barbers,
+          status:   s.status,
+          revenue:  formatRevenue(s.revenue),
+          rate:     s.rate,
+          logo_url: s.logo_url ?? null,
+        }))
+      );
+    } catch { /* silent */ }
+  };
 
-  /* ================= STATS ================= */
-
-  const stats = useMemo(() => {
-    return {
-      total:   barbershops.length,
-      free:    barbershops.filter((s) => s.plan === "Free").length,
-      pro:     barbershops.filter((s) => s.plan === "Pro").length,
-      premium: barbershops.filter((s) => s.plan === "Premium").length,
-    };
-  }, [barbershops]);
+  useEffect(() => { loadStats(); }, []);
+  useEffect(() => { loadBarbershops(); }, []);
 
   /* ================= FILTER ================= */
 
@@ -128,6 +117,13 @@ export default function Barbershops() {
 
   const editFields: FormField[] = [
     {
+      name: "photo",
+      label: "Shop Photo",
+      type: "image" as const,
+      disabled: false,
+      placeholderIcon: Store,
+    },
+    {
       name: "name",
       label: "Barbershop Name",
       type: "text",
@@ -136,8 +132,8 @@ export default function Barbershops() {
       validation: (value) =>
         value.length >= 3 ? null : "Minimum 3 characters",
     },
-    { name: "owner",    label: "Owner Name",     type: "text",   required: true },
-    { name: "location", label: "Location",        type: "text",   required: true },
+    { name: "owner",    label: "Owner Name", type: "text", required: true },
+    { name: "location", label: "Location",   type: "text", required: true },
     {
       name: "plan",
       label: "Subscription Plan",
@@ -148,25 +144,6 @@ export default function Barbershops() {
         { value: "Pro",     label: "Pro"     },
         { value: "Premium", label: "Premium" },
       ],
-    },
-    {
-      name: "barbers",
-      label: "Number of Barbers",
-      type: "number",
-      required: true,
-      validation: (value) =>
-        Number(value) > 0 ? null : "At least 1 barber required",
-    },
-    { name: "revenue", label: "Monthly Revenue", type: "text",   placeholder: "Rp 10.5M" },
-    {
-      name: "rate",
-      label: "Rating",
-      type: "number",
-      placeholder: "0.0 - 5.0",
-      validation: (value) =>
-        Number(value) >= 0 && Number(value) <= 5
-          ? null
-          : "Rating must be between 0 and 5",
     },
     {
       name: "status",
@@ -187,21 +164,30 @@ export default function Barbershops() {
     setShowEditModal(true);
   };
 
+  const handleViewClick = (shop: Barbershop) => {
+    setSelectedViewShop(shop);
+    setShowViewModal(true);
+  };
+
   const handleSaveEdit = async (data: Record<string, string | number>) => {
     if (!selectedShop) return;
     setIsLoading(true);
     try {
-      await new Promise((r) => setTimeout(r, 1200));
-      setBarbershops((prev) =>
-        prev.map((shop) =>
-          shop.id === selectedShop.id
-            ? { ...shop, ...data, barbers: Number(data.barbers), rate: Number(data.rate) }
-            : shop
-        )
-      );
+      const payload: Record<string, any> = {
+        name:              data.name as string,
+        owner_name:        data.owner as string,
+        city:              data.location as string,
+        subscription_plan: (data.plan as string).toLowerCase(),
+        status:            data.status as string,
+      };
+      if (typeof data.photo === "string" && data.photo.startsWith("data:image")) {
+        payload.photo_base64 = data.photo;
+      }
+      await adminService.updateAdminBarbershop(selectedShop.id, payload);
       setShowEditModal(false);
-      toast.success("Barbershop Updated", `${selectedShop.name} has been updated successfully.`);
       setSelectedShop(null);
+      toast.success("Barbershop Updated", `${selectedShop.name} updated successfully.`);
+      await Promise.all([loadStats(), loadBarbershops()]);
     } catch {
       toast.error("Update Failed", "Something went wrong. Please try again.");
     } finally {
@@ -212,109 +198,129 @@ export default function Barbershops() {
   /* ================= DELETE ================= */
 
   const handleDeleteClick = (shop: Barbershop) => {
+    if (shop.status === "active") {
+      toast.error("Cannot Delete", "Active barbershop cannot be deleted.");
+      return;
+    }
     setSelectedShop(shop);
     setShowDeleteModal(true);
   };
 
-  const handleConfirmDelete = () => {
+  const handleConfirmDelete = async () => {
     if (!selectedShop) return;
     const name = selectedShop.name;
-    setBarbershops((prev) => prev.filter((s) => s.id !== selectedShop.id));
-    setShowDeleteModal(false);
-    setSelectedShop(null);
-    toast.success("Barbershop Deleted", `${name} has been removed.`);
+    try {
+      await adminService.deleteAdminBarbershop(selectedShop.id);
+      setShowDeleteModal(false);
+      setSelectedShop(null);
+      toast.success("Barbershop Deleted", `${name} has been removed.`);
+      await Promise.all([loadStats(), loadBarbershops()]);
+    } catch {
+      toast.error("Delete Failed", "Something went wrong. Please try again.");
+    }
   };
 
   /* ================= TABLE COLUMNS ================= */
 
-  const columns = useMemo(
-    () => [
-      {
-        key: "name",
-        header: "Shop",
-        render: (shop: Barbershop) => (
-          <div className="min-w-[140px]">
-            <p className="text-white font-semibold truncate max-w-[160px]">{shop.name}</p>
-            <p className="text-xs text-muted-foreground flex items-center gap-1">
-              <MapPin size={12} />
-              <span className="truncate max-w-[120px]">{shop.location}</span>
-            </p>
-          </div>
-        ),
-      },
-      {
-        key: "owner",
-        header: "Owner",
-        render: (shop: Barbershop) => (
-          <span className="text-muted-foreground whitespace-nowrap min-w-[100px] block">
-            {shop.owner}
-          </span>
-        ),
-      },
-      {
-        key: "plan",
-        header: "Plan",
-        render: (shop: Barbershop) => (
-          <div className="min-w-[80px]">
-            <Badge text={shop.plan} variant={PLAN_STYLES[shop.plan]} />
-          </div>
-        ),
-      },
-      {
-        key: "barbers",
-        header: "Barbers",
-        render: (shop: Barbershop) => (
-          <span className="whitespace-nowrap">{shop.barbers}</span>
-        ),
-      },
-      {
-        key: "revenue",
-        header: "Revenue",
-        render: (shop: Barbershop) => (
-          <span className="font-medium whitespace-nowrap min-w-[80px] block">{shop.revenue}</span>
-        ),
-      },
-      {
-        key: "rate",
-        header: "Rate",
-        render: (shop: Barbershop) => (
-          <div className="flex items-center gap-1 min-w-[70px]">
-            <Star size={13} className="text-yellow-400 fill-yellow-400 shrink-0" />
-            <span className="font-medium text-white">{shop.rate.toFixed(1)}</span>
-          </div>
-        ),
-      },
-      {
-        key: "status",
-        header: "Status",
-        render: (shop: Barbershop) => (
-          <div className="min-w-[80px]">
-            <Badge
-              text={capitalizeFirst(shop.status)}
-              variant={STATUS_STYLES[shop.status]}
-              showDot
-              dotColor={STATUS_DOT_COLORS[shop.status]}
-            />
-          </div>
-        ),
-      },
-      {
-        key: "actions",
-        header: "Actions",
-        headerClassName: "text-right",
-        className: "text-right",
-        render: (shop: Barbershop) => (
-          <ActionButtons
-            actions={[
-              { type: "edit",   onClick: () => handleEditClick(shop)   },
-              { type: "delete", onClick: () => handleDeleteClick(shop) },
-            ]}
-          />
-        ),
-      },
-    ],
-    [handleEditClick, handleDeleteClick]
-  );
+    const columns = useMemo(
+      () => [
+        {
+          key: "name",
+          header: "Shop",
+          headerClassName: "text-left w-[180px]",
+          render: (shop: Barbershop) => (
+            <div className="w-[180px]">
+              <p className="text-white font-semibold truncate">{shop.name}</p>
+              <p className="text-xs text-muted-foreground flex items-center gap-1">
+                <MapPin size={12} />
+                <span className="truncate">{shop.location}</span>
+              </p>
+            </div>
+          ),
+        },
+        {
+          key: "owner",
+          header: "Owner",
+          headerClassName: "text-left w-[140px]",
+          render: (shop: Barbershop) => (
+            <span className="text-muted-foreground w-[140px] block truncate">
+              {shop.owner}
+            </span>
+          ),
+        },
+        {
+          key: "plan",
+          header: "Plan",
+          headerClassName: "text-left w-[100px]",
+          render: (shop: Barbershop) => (
+            <div className="w-[100px]">
+              <Badge text={shop.plan} variant={PLAN_STYLES[shop.plan]} />
+            </div>
+          ),
+        },
+        {
+          key: "barbers",
+          header: "Barbers",
+          headerClassName: "text-left w-[80px]", // ← ganti text-center jadi text-left
+          className: "text-left",                // ← ganti text-center jadi text-left
+          render: (shop: Barbershop) => (
+            <span className="block text-left w-[80px]">{shop.barbers}</span> // ← text-left
+          ),
+        },
+        {
+          key: "revenue",
+          header: "Revenue",
+          headerClassName: "text-left w-[110px]",
+          render: (shop: Barbershop) => (
+            <span className="font-medium w-[110px] block">{shop.revenue}</span>
+          ),
+        },
+        {
+          key: "rate",
+          header: "Rate",
+          headerClassName: "text-left w-[80px]",
+          render: (shop: Barbershop) => (
+            <div className="flex items-center gap-1 w-[80px]">
+              <Star size={13} className="text-yellow-400 fill-yellow-400 shrink-0" />
+              <span className="font-medium text-white">{shop.rate.toFixed(1)}</span>
+            </div>
+          ),
+        },
+        {
+          key: "status",
+          header: "Status",
+          headerClassName: "text-left w-[100px]",
+          render: (shop: Barbershop) => (
+            <div className="w-[100px]">
+              <Badge
+                text={capitalizeFirst(shop.status)}
+                variant={STATUS_STYLES[shop.status]}
+                showDot
+                dotColor={STATUS_DOT_COLORS[shop.status]}
+              />
+            </div>
+          ),
+        },
+        {
+          key: "actions",
+          header: "Actions",
+          headerClassName: "text-center w-[80px]",
+          className: "text-center",
+          render: (shop: Barbershop) => (
+            <div className="flex justify-center w-[80px]">
+              <ActionButtons
+                actions={[
+                  { type: "view",   onClick: () => handleViewClick(shop)   },
+                  { type: "edit",   onClick: () => handleEditClick(shop)   },
+                  { type: "delete", onClick: () => handleDeleteClick(shop) },
+                ]}
+              />
+            </div>
+          ),
+        },
+      ],
+      [handleViewClick, handleEditClick, handleDeleteClick]
+    );
 
   /* ================= UI ================= */
 
@@ -326,7 +332,7 @@ export default function Barbershops() {
       menuItems={superAdminMenu}
       logo={superAdminLogo}
       userProfile={
-        currentUser ?? {
+        user ?? {
           name:  "Super Admin",
           email: "admin@cutbro.com",
           role:  "admin",
@@ -351,14 +357,14 @@ export default function Barbershops() {
             },
             {
               icon: Users,
-              title: "Free Plan",
+              title: "Free",
               value: stats.free,
               iconBgColor: "bg-[#60A5FA1A]",
               iconColor: "text-[#60A5FA]",
             },
             {
               icon: TrendingUp,
-              title: "Pro Plan",
+              title: "Pro",
               value: stats.pro,
               iconBgColor: "bg-[#F59E0B1A]",
               iconColor: "text-[#F59E0B]",
@@ -435,7 +441,9 @@ export default function Barbershops() {
                   ]}
                   actions={
                     <ActionButtons
+                      align="end"
                       actions={[
+                        { type: "view",   onClick: () => handleViewClick(shop)   },
                         { type: "edit",   onClick: () => handleEditClick(shop)   },
                         { type: "delete", onClick: () => handleDeleteClick(shop) },
                       ]}
@@ -446,6 +454,7 @@ export default function Barbershops() {
             />
           </div>
         </TableCard>
+
       </div>
 
       {/* ================= MODALS ================= */}
@@ -459,7 +468,7 @@ export default function Barbershops() {
         title="Edit Barbershop"
         subtitle="Update barbershop information"
         fields={editFields}
-        initialData={selectedShop ?? {}}
+        initialData={{ ...selectedShop, photo: selectedShop?.logo_url ?? "" }}
         isLoading={isLoading}
       />
 
@@ -470,6 +479,103 @@ export default function Barbershops() {
         onConfirm={handleConfirmDelete}
         onCancel={() => setShowDeleteModal(false)}
       />
+
+      {showViewModal && selectedViewShop && (
+        <ViewBarbershopModal
+          shop={selectedViewShop}
+          onClose={() => { setShowViewModal(false); setSelectedViewShop(null); }}
+        />
+      )}
+
     </DashboardLayout>
+  );
+}
+
+function ViewField({
+  label,
+  value,
+  children,
+}: {
+  label: string;
+  value?: string;
+  children?: React.ReactNode;
+}) {
+  return (
+    <div className="space-y-1.5">
+      <label className="text-xs font-medium text-zinc-400 uppercase tracking-wide">
+        {label}
+      </label>
+      <div className="w-full bg-zinc-800/40 border border-zinc-700/40 rounded-xl px-4 py-2.5 text-sm text-white">
+        {children ?? value}
+      </div>
+    </div>
+  );
+}
+
+function ViewBarbershopModal({
+  shop,
+  onClose,
+}: {
+  shop: Barbershop;
+  onClose: () => void;
+}) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
+      <div className="relative z-10 w-full max-w-md bg-zinc-900 border border-zinc-700/60 rounded-2xl shadow-2xl overflow-hidden max-h-[90vh] overflow-y-auto">
+
+        {/* Header */}
+        <div className="flex items-start justify-between px-6 pt-6 pb-4 border-b border-zinc-800">
+          <div>
+            <h3 className="text-white font-semibold text-lg">Barbershop Detail</h3>
+            <p className="text-zinc-400 text-sm mt-0.5">View barbershop information</p>
+          </div>
+          <button
+            onClick={onClose}
+            className="text-zinc-400 hover:text-white transition-colors p-1 rounded-lg hover:bg-zinc-800"
+          >
+            <X size={18} />
+          </button>
+        </div>
+
+        {/* Body */}
+        <div className="px-6 py-5 space-y-4">
+
+          {/* Shop Photo Preview */}
+          {shop.logo_url ? (
+            <img
+              src={shop.logo_url}
+              alt={shop.name}
+              className="w-full h-44 object-cover rounded-xl border border-zinc-700/40"
+            />
+          ) : (
+            <div className="w-full h-44 bg-zinc-800/60 border border-zinc-700/40 rounded-xl flex flex-col items-center justify-center gap-2">
+              <Store size={40} className="text-zinc-600" />
+              <span className="text-xs text-zinc-500">No photo uploaded</span>
+            </div>
+          )}
+
+          <ViewField label="Barbershop Name" value={shop.name} />
+          <ViewField label="Owner" value={shop.owner} />
+          <ViewField label="Location" value={shop.location} />
+          <ViewField label="Subscription Plan">
+            <Badge text={shop.plan} variant={PLAN_STYLES[shop.plan]} />
+          </ViewField>
+          <div className="grid grid-cols-2 gap-3">
+            <ViewField label="Total Barbers" value={String(shop.barbers)} />
+            <ViewField label="Revenue" value={shop.revenue} />
+          </div>
+          <ViewField label="Rating" value={`⭐ ${shop.rate.toFixed(1)}`} />
+          <ViewField label="Status">
+            <Badge
+              text={capitalizeFirst(shop.status)}
+              variant={STATUS_STYLES[shop.status]}
+              showDot
+              dotColor={STATUS_DOT_COLORS[shop.status]}
+            />
+          </ViewField>
+        </div>
+      </div>
+    </div>
   );
 }

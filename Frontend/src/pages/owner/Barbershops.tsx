@@ -1,12 +1,13 @@
 import DashboardLayout from "@/components/dashboard/DashboardLayout";
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect, useRef } from "react";
 import {
-  Store, Camera, MapPin, Clock, Trash2, Upload,
-  AlertCircle,
+  Store, Camera, Clock, Trash2, Upload,
+  AlertCircle, Building2, ChevronDown, ImagePlus, X,
 } from "lucide-react";
 
 import { ownerLogo, ownerMenu } from "@/components/config/Menu";
-import { logout, getUser } from "@/lib/auth";
+import { useAuth } from "@/components/context/AuthContext";
+import * as ownerService from "@/services/owner.service";
 
 import { useToast } from "@/components/ui/Toast";
 
@@ -20,15 +21,29 @@ interface OperatingHour {
 
 interface Barbershop {
   name: string;
+  subscription_plan: string;
+  city: string;
   address: string;
   phone: string;
   description: string;
   photos: string[];
+  galleryPhotos: { id: number; photo_url: string }[];
   operatingHours: OperatingHour[];
 }
 
 /* ================= CONSTANTS ================= */
 const DAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
+
+const INDONESIAN_CITIES = [
+  "Ambon", "Balikpapan", "Banda Aceh", "Bandar Lampung", "Banjarmasin",
+  "Batam", "Bekasi", "Bogor", "Cimahi", "Cirebon",
+  "Denpasar", "Depok", "Jakarta", "Jambi", "Jayapura",
+  "Kediri", "Kupang", "Madiun", "Makassar", "Malang",
+  "Manado", "Mataram", "Medan", "Padang", "Palangkaraya",
+  "Palembang", "Pekanbaru", "Pontianak", "Samarinda", "Semarang",
+  "Serang", "Solo", "Surabaya", "Tangerang", "Tasikmalaya",
+  "Yogyakarta",
+];
 
 const DEFAULT_HOURS: OperatingHour[] = DAYS.map((day) => ({
   day,
@@ -37,15 +52,6 @@ const DEFAULT_HOURS: OperatingHour[] = DAYS.map((day) => ({
   closeTime: "21:00",
 }));
 
-const DUMMY_DATA: Barbershop = {
-  name: "CutBro Barbershop",
-  address: "Jl. Malioboro No. 12, Yogyakarta, DI Yogyakarta 55213",
-  phone: "+62 812-3456-7890",
-  description: "Premium barbershop with professional barbers and modern equipment.",
-  photos: [],
-  operatingHours: DEFAULT_HOURS,
-};
-
 /* ================= HELPERS ================= */
 function FieldWarning({ message }: { message: string }) {
   return (
@@ -53,6 +59,21 @@ function FieldWarning({ message }: { message: string }) {
       <AlertCircle className="w-3.5 h-3.5 flex-shrink-0" />
       {message}
     </p>
+  );
+}
+
+/* ================= PLAN BADGE ================= */
+const PLAN_STYLE: Record<string, string> = {
+  free:    "bg-zinc-700 text-zinc-300",
+  pro:     "bg-blue-500/20 text-blue-400 border border-blue-500/30",
+  premium: "bg-[#D4AF37]/20 text-[#D4AF37] border border-[#D4AF37]/30",
+};
+
+function PlanBadge({ plan }: { plan: string }) {
+  return (
+    <span className={`text-xs font-bold px-2.5 py-1 rounded-full capitalize ${PLAN_STYLE[plan] ?? PLAN_STYLE.free}`}>
+      {plan}
+    </span>
   );
 }
 
@@ -76,24 +97,75 @@ function SectionCard({ title, icon: Icon, children }: {
 }
 
 /* ================= MAIN PAGE ================= */
+const EMPTY_SHOP: Barbershop = {
+  name: "", subscription_plan: "free", city: "", address: "", phone: "", description: "", photos: [], galleryPhotos: [], operatingHours: DEFAULT_HOURS,
+};
+
 export default function OwnerBarbershop() {
   const toast = useToast();
+  const { user, logout } = useAuth();
 
-  const [shop, setShop]           = useState<Barbershop>(DUMMY_DATA);
-  const [savedShop, setSavedShop] = useState<Barbershop>(DUMMY_DATA);
+  const [shop, setShop]           = useState<Barbershop>(EMPTY_SHOP);
+  const [savedShop, setSavedShop] = useState<Barbershop>(EMPTY_SHOP);
   const [submitted, setSubmitted] = useState(false);
   const [isSaving, setIsSaving]   = useState(false);
+  const [newPhotoFile, setNewPhotoFile] = useState<File | null>(null);
+  const [galleryPhotos, setGalleryPhotos] = useState<{ id: number; photo_url: string }[]>([]);
+  const [pendingGalleryUploads, setPendingGalleryUploads] = useState<{ file: File; preview: string }[]>([]);
+  const [pendingGalleryDeletions, setPendingGalleryDeletions] = useState<number[]>([]);
+  const [cityOpen, setCityOpen] = useState(false);
+  const cityRef = useRef<HTMLDivElement>(null);
 
-  const currentUser = getUser();
+  useEffect(() => {
+    ownerService.getBarbershopProfile().then((data) => {
+      const mapped: Barbershop = {
+        name:              data.name,
+        subscription_plan: data.subscription_plan ?? "free",
+        city:              data.city ?? "",
+        address:           data.address,
+        phone:             data.phone,
+        description:       data.description ?? "",
+        photos:            data.photos ?? [],
+        galleryPhotos:     data.gallery_photos ?? [],
+        operatingHours: data.operational_hours?.length
+          ? DAYS.map((day) => {
+              const h = data.operational_hours.find((oh) => oh.day === day);
+              return h
+                ? { day: h.day, isOpen: h.is_open, openTime: h.open_time?.slice(0, 5) ?? "09:00", closeTime: h.close_time?.slice(0, 5) ?? "21:00" }
+                : { day, isOpen: day !== "Sunday", openTime: "09:00", closeTime: "21:00" };
+            })
+          : DEFAULT_HOURS,
+      };
+      setShop(mapped);
+      setSavedShop(mapped);
+      setGalleryPhotos(data.gallery_photos ?? []);
+    }).catch(() => {
+      toast.error("Load Failed", "Failed to load barbershop data. Please refresh the page.");
+    });
+  }, []);
+
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (cityRef.current && !cityRef.current.contains(e.target as Node)) {
+        setCityOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, []);
 
   const hasChanges = useMemo(
-    () => JSON.stringify(shop) !== JSON.stringify(savedShop),
-    [shop, savedShop]
+    () =>
+      JSON.stringify(shop) !== JSON.stringify(savedShop) ||
+      pendingGalleryUploads.length > 0 ||
+      pendingGalleryDeletions.length > 0,
+    [shop, savedShop, pendingGalleryUploads, pendingGalleryDeletions]
   );
 
   const errors = useMemo(() => {
     const e: Record<string, string> = {};
     if (!shop.name.trim())    e.name    = "Barbershop name cannot be empty";
+    if (!shop.city.trim())    e.city    = "City cannot be empty";
     if (!shop.address.trim()) e.address = "Address cannot be empty";
     if (!shop.phone.trim())   e.phone   = "Phone number cannot be empty";
     shop.operatingHours.forEach((h, i) => {
@@ -105,17 +177,60 @@ export default function OwnerBarbershop() {
   const isValid = Object.keys(errors).length === 0;
 
   const handleAddPhoto = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = Array.from(e.target.files || []);
-    files.forEach((file) => {
-      const reader = new FileReader();
-      reader.onloadend = () => setShop((prev) => ({ ...prev, photos: [...prev.photos, reader.result as string] }));
-      reader.readAsDataURL(file);
-    });
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (file.size > 2 * 1024 * 1024) {
+      toast.error("File Too Large", "Photo must be smaller than 2MB.");
+      e.target.value = "";
+      return;
+    }
+    // Revoke previous blob URL before creating a new one
+    if (shop.photos[0]?.startsWith("blob:")) {
+      URL.revokeObjectURL(shop.photos[0]);
+    }
+    setNewPhotoFile(file);
+    setShop((prev) => ({ ...prev, photos: [URL.createObjectURL(file)] }));
     e.target.value = "";
   };
 
-  const handleRemovePhoto = (index: number) => {
-    setShop((prev) => ({ ...prev, photos: prev.photos.filter((_, i) => i !== index) }));
+  const handleRemovePhoto = (_index: number) => {
+    if (shop.photos[0]?.startsWith("blob:")) {
+      URL.revokeObjectURL(shop.photos[0]);
+    }
+    setNewPhotoFile(null);
+    setShop((prev) => ({ ...prev, photos: [] }));
+  };
+
+  const handleAddGalleryPhoto = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (file.size > 2 * 1024 * 1024) {
+      toast.error("File Too Large", "Photo must be smaller than 2MB.");
+      e.target.value = "";
+      return;
+    }
+    const displayCount =
+      galleryPhotos.filter((p) => !pendingGalleryDeletions.includes(p.id)).length +
+      pendingGalleryUploads.length;
+    if (displayCount >= 4) {
+      toast.error("Limit Reached", "Maximum 4 photos allowed.");
+      e.target.value = "";
+      return;
+    }
+    setPendingGalleryUploads((prev) => [
+      ...prev,
+      { file, preview: URL.createObjectURL(file) },
+    ]);
+    e.target.value = "";
+  };
+
+  const handleDeleteGalleryPhoto = (id: number) => {
+    setPendingGalleryDeletions((prev) => [...prev, id]);
+  };
+
+  const handleRemovePendingPhoto = (preview: string) => {
+    URL.revokeObjectURL(preview);
+    setPendingGalleryUploads((prev) => prev.filter((p) => p.preview !== preview));
   };
 
   const updateHour = (index: number, field: keyof OperatingHour, value: any) => {
@@ -146,11 +261,49 @@ export default function OwnerBarbershop() {
     }
     setIsSaving(true);
     try {
-      await new Promise((r) => setTimeout(r, 1400));
+      const formData = new FormData();
+      formData.append("name",        shop.name);
+      formData.append("city",        shop.city);
+      formData.append("address",     shop.address);
+      formData.append("phone",       shop.phone);
+      formData.append("description", shop.description);
+      if (newPhotoFile) {
+        formData.append("photo", newPhotoFile);
+      } else if (shop.photos.length === 0) {
+        formData.append("remove_photo", "1");
+      }
+      shop.operatingHours.forEach((h, i) => {
+        formData.append(`operational_hours[${i}][day]`,        h.day);
+        formData.append(`operational_hours[${i}][is_open]`,    h.isOpen ? "1" : "0");
+        formData.append(`operational_hours[${i}][open_time]`,  h.openTime);
+        formData.append(`operational_hours[${i}][close_time]`, h.closeTime);
+      });
+      await ownerService.updateBarbershopProfile(formData);
+
+      // Process gallery uploads
+      const uploaded: { id: number; photo_url: string }[] = [];
+      for (const { file, preview } of pendingGalleryUploads) {
+        const newPhoto = await ownerService.uploadBarbershopPhoto(file);
+        uploaded.push(newPhoto);
+        URL.revokeObjectURL(preview);
+      }
+      // Process gallery deletions
+      for (const id of pendingGalleryDeletions) {
+        await ownerService.deleteBarbershopPhoto(id);
+      }
+      setGalleryPhotos((prev) => [
+        ...prev.filter((p) => !pendingGalleryDeletions.includes(p.id)),
+        ...uploaded,
+      ]);
+      setPendingGalleryUploads([]);
+      setPendingGalleryDeletions([]);
+
       setSavedShop(shop);
+      setNewPhotoFile(null);
       toast.success("Changes Saved!", "Barbershop info updated successfully.");
-    } catch {
-      toast.error("Save Failed", "Something went wrong. Please try again.");
+    } catch (err: any) {
+      const msg = err?.response?.data?.message ?? "Something went wrong. Please try again.";
+      toast.error("Save Failed", msg);
     } finally {
       setIsSaving(false);
     }
@@ -163,23 +316,26 @@ export default function OwnerBarbershop() {
       showSidebar
       menuItems={ownerMenu}
       logo={ownerLogo}
-      userProfile={currentUser ?? { name: "owner", email: "owner@cutbro.com", role: "owner" }}
+      userProfile={user ?? { name: "owner", email: "owner@cutbro.com", role: "owner" }}
       showNotification
       notificationCount={3}
       onLogout={logout}
     >
-      <div className="w-full flex justify-center">
-        <div className="w-full max-w-3xl space-y-6">
+      <div className="w-full max-w-5xl mx-auto space-y-6">
 
-          {submitted && !isValid && (
-            <div className="flex items-start gap-3 p-4 bg-red-500/10 border border-red-500/30 rounded-xl">
-              <AlertCircle className="w-5 h-5 text-red-400 flex-shrink-0 mt-0.5" />
-              <p className="text-sm text-red-400">Please fix the highlighted fields before saving.</p>
-            </div>
-          )}
+        {submitted && !isValid && (
+          <div className="flex items-start gap-3 p-4 bg-red-500/10 border border-red-500/30 rounded-xl">
+            <AlertCircle className="w-5 h-5 text-red-400 flex-shrink-0 mt-0.5" />
+            <p className="text-sm text-red-400">Please fix the highlighted fields before saving.</p>
+          </div>
+        )}
 
-          <SectionCard title="Barbershop Photos" icon={Camera}>
-            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+        {/* ── TOP: 2-column grid ── */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+
+          {/* LEFT — Photos */}
+          <SectionCard title="Barbershop Logo" icon={Camera}>
+            <div className="flex flex-col gap-3">
               {shop.photos.map((photo, i) => (
                 <div key={i} className="relative group aspect-video rounded-xl overflow-hidden border-2 border-zinc-700">
                   <img src={photo} alt={`Photo ${i + 1}`} className="w-full h-full object-cover" />
@@ -188,94 +344,253 @@ export default function OwnerBarbershop() {
                       <Trash2 size={14} className="text-white" />
                     </button>
                   </div>
-                  <span className="absolute top-2 left-2 text-[10px] font-bold bg-black/60 text-white px-2 py-0.5 rounded-full">{i + 1}</span>
                 </div>
               ))}
-              {shop.photos.length < 6 && (
+              {shop.photos.length < 1 && (
                 <label className="aspect-video rounded-xl border-2 border-dashed border-zinc-700 hover:border-[#D4AF37]/60 hover:bg-[#D4AF37]/5 transition-all cursor-pointer flex flex-col items-center justify-center gap-2">
-                  <input type="file" accept="image/*" multiple onChange={handleAddPhoto} className="hidden" />
+                  <input type="file" accept="image/*" onChange={handleAddPhoto} className="hidden" />
                   <Upload size={20} className="text-zinc-500" />
-                  <span className="text-xs text-zinc-500 font-medium">Add Photo</span>
-                  <span className="text-[10px] text-zinc-600">{shop.photos.length}/6</span>
+                  <span className="text-xs text-zinc-500 font-medium">Upload Logo</span>
                 </label>
               )}
+              <p className="text-xs text-zinc-500">Recommended: 1280×720px (16:9) • JPG, PNG • Max 2MB</p>
             </div>
-            <p className="text-xs text-zinc-500 mt-3">Upload up to 6 photos • JPG, PNG • Recommended 16:9 ratio</p>
+
+            {/* Barbershop Photos */}
+            <div className="border-t border-zinc-800 pt-4 space-y-3">
+              <p className="text-sm font-semibold text-zinc-300">
+                Barbershop Photos{" "}
+                <span className="text-xs font-normal text-zinc-500">
+                  ({galleryPhotos.filter((p) => !pendingGalleryDeletions.includes(p.id)).length + pendingGalleryUploads.length}/4)
+                </span>
+              </p>
+
+              <div className="grid grid-cols-2 gap-3">
+                {/* Saved photos — tampil normal, X = mark for deletion */}
+                {galleryPhotos
+                  .filter((p) => !pendingGalleryDeletions.includes(p.id))
+                  .map((photo) => (
+                    <div
+                      key={photo.id}
+                      className="relative group rounded-xl overflow-hidden border border-zinc-700 aspect-video bg-zinc-800"
+                    >
+                      <img src={photo.photo_url} alt="Barbershop" className="w-full h-full object-cover" />
+                      <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                        <button
+                          type="button"
+                          onClick={() => handleDeleteGalleryPhoto(photo.id)}
+                          className="w-8 h-8 bg-red-500 hover:bg-red-600 rounded-full flex items-center justify-center transition-colors"
+                        >
+                          <X size={14} className="text-white" />
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+
+                {/* Pending uploads — preview lokal, border kuning, X = batal */}
+                {pendingGalleryUploads.map(({ preview }) => (
+                  <div
+                    key={preview}
+                    className="relative group rounded-xl overflow-hidden border-2 border-[#D4AF37]/50 aspect-video bg-zinc-800"
+                  >
+                    <img src={preview} alt="Pending" className="w-full h-full object-cover" />
+                    <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                      <button
+                        type="button"
+                        onClick={() => handleRemovePendingPhoto(preview)}
+                        className="w-8 h-8 bg-red-500 hover:bg-red-600 rounded-full flex items-center justify-center transition-colors"
+                      >
+                        <X size={14} className="text-white" />
+                      </button>
+                    </div>
+                  </div>
+                ))}
+
+                {/* Tombol Add — sembunyikan jika sudah 4 */}
+                {galleryPhotos.filter((p) => !pendingGalleryDeletions.includes(p.id)).length +
+                  pendingGalleryUploads.length < 4 && (
+                  <label className="flex flex-col items-center justify-center rounded-xl border-2 border-dashed border-zinc-700 hover:border-[#D4AF37]/60 hover:bg-[#D4AF37]/5 aspect-video cursor-pointer transition-all">
+                    <ImagePlus size={22} className="text-zinc-500" />
+                    <span className="text-xs text-zinc-500 mt-1 font-medium">Add Photo</span>
+                    <input
+                      type="file"
+                      accept="image/*"
+                      className="hidden"
+                      onChange={handleAddGalleryPhoto}
+                    />
+                  </label>
+                )}
+              </div>
+
+              <p className="text-xs text-zinc-500">
+                Upload up to 4 photos. Max 2MB each.
+              </p>
+            </div>
           </SectionCard>
 
+
+          {/* RIGHT — Basic Info (merged with Address) */}
           <SectionCard title="Basic Information" icon={Store}>
             <div className="space-y-4">
+
+              {/* Name + Plan badge */}
               <div>
-                <label className="block text-sm font-semibold text-zinc-300 mb-1.5">Barbershop Name <span className="text-red-400">*</span></label>
+                <div className="flex items-center justify-between mb-1.5">
+                  <label className="text-sm font-semibold text-zinc-300">Barbershop Name <span className="text-red-400">*</span></label>
+                  <div className="flex items-center gap-1.5 text-xs text-zinc-500">
+                    <span>Current Plan:</span>
+                    <PlanBadge plan={shop.subscription_plan} />
+                  </div>
+                </div>
                 <input type="text" className={`w-full p-3 rounded-lg bg-zinc-800 border-2 text-white placeholder-zinc-500 focus:outline-none transition-colors ${submitted && errors.name ? "border-red-500" : "border-zinc-700 focus:border-[#D4AF37]"}`} value={shop.name} onChange={(e) => setShop((p) => ({ ...p, name: e.target.value }))} placeholder="Enter barbershop name" />
                 {submitted && errors.name && <FieldWarning message={errors.name} />}
               </div>
+
+              {/* Phone */}
               <div>
                 <label className="block text-sm font-semibold text-zinc-300 mb-1.5">Phone Number <span className="text-red-400">*</span></label>
                 <input type="tel" className={`w-full p-3 rounded-lg bg-zinc-800 border-2 text-white placeholder-zinc-500 focus:outline-none transition-colors ${submitted && errors.phone ? "border-red-500" : "border-zinc-700 focus:border-[#D4AF37]"}`} value={shop.phone} onChange={(e) => setShop((p) => ({ ...p, phone: e.target.value }))} placeholder="+62 812-3456-7890" />
                 {submitted && errors.phone && <FieldWarning message={errors.phone} />}
               </div>
+
+              {/* City dropdown */}
+              <div ref={cityRef} className="relative">
+                <label className="block text-sm font-semibold text-zinc-300 mb-1.5">City <span className="text-red-400">*</span></label>
+                <button
+                  type="button"
+                  onClick={() => setCityOpen((o) => !o)}
+                  className={`w-full flex items-center gap-3 p-3 rounded-lg bg-zinc-800 border-2 text-left focus:outline-none transition-colors ${submitted && errors.city ? "border-red-500" : "border-zinc-700 focus:border-[#D4AF37]"}`}
+                >
+                  <Building2 size={16} className="text-zinc-500 flex-shrink-0" />
+                  <span className={`flex-1 text-sm ${shop.city ? "text-white" : "text-zinc-500"}`}>
+                    {shop.city || "Select city"}
+                  </span>
+                  <ChevronDown size={16} className={`text-zinc-500 transition-transform ${cityOpen ? "rotate-180" : ""}`} />
+                </button>
+                {cityOpen && (
+                  <div className="absolute z-50 top-full left-0 right-0 mt-1 bg-zinc-800 border border-zinc-700 rounded-xl overflow-hidden shadow-xl">
+                    <div className="max-h-48 overflow-y-auto">
+                      {INDONESIAN_CITIES.map((city) => (
+                        <button key={city} type="button"
+                          onClick={() => { setShop((p) => ({ ...p, city })); setCityOpen(false); }}
+                          className={`w-full text-left px-4 py-2.5 text-sm transition-colors ${shop.city === city ? "bg-[#D4AF37]/20 text-[#D4AF37]" : "text-zinc-300 hover:bg-zinc-700"}`}
+                        >
+                          {city}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                {submitted && errors.city && <FieldWarning message={errors.city} />}
+              </div>
+
+              {/* Full Address */}
+              <div>
+                <label className="block text-sm font-semibold text-zinc-300 mb-1.5">Full Address <span className="text-red-400">*</span></label>
+                <textarea rows={2} className={`w-full p-3 rounded-lg bg-zinc-800 border-2 text-white placeholder-zinc-500 focus:outline-none transition-colors resize-none ${submitted && errors.address ? "border-red-500" : "border-zinc-700 focus:border-[#D4AF37]"}`} value={shop.address} onChange={(e) => setShop((p) => ({ ...p, address: e.target.value }))} placeholder="Street, district, city, postal code" />
+                {submitted && errors.address && <FieldWarning message={errors.address} />}
+              </div>
+
+              {/* Description */}
               <div>
                 <label className="block text-sm font-semibold text-zinc-300 mb-1.5">Description <span className="text-zinc-500 font-normal">(Optional)</span></label>
-                <textarea rows={3} className="w-full p-3 rounded-lg bg-zinc-800 border-2 border-zinc-700 text-white placeholder-zinc-500 focus:border-[#D4AF37] focus:outline-none transition-colors resize-none" value={shop.description} onChange={(e) => setShop((p) => ({ ...p, description: e.target.value }))} placeholder="Brief description of your barbershop..." />
-                <p className="text-xs text-zinc-500 mt-1">Shown on your public profile and booking page</p>
+                <textarea rows={2} className="w-full p-3 rounded-lg bg-zinc-800 border-2 border-zinc-700 text-white placeholder-zinc-500 focus:border-[#D4AF37] focus:outline-none transition-colors resize-none" value={shop.description} onChange={(e) => setShop((p) => ({ ...p, description: e.target.value }))} placeholder="Brief description of your barbershop..." />
               </div>
             </div>
           </SectionCard>
-
-          <SectionCard title="Address" icon={MapPin}>
-            <div>
-              <label className="block text-sm font-semibold text-zinc-300 mb-1.5">Full Address <span className="text-red-400">*</span></label>
-              <textarea rows={3} className={`w-full p-3 rounded-lg bg-zinc-800 border-2 text-white placeholder-zinc-500 focus:outline-none transition-colors resize-none ${submitted && errors.address ? "border-red-500" : "border-zinc-700 focus:border-[#D4AF37]"}`} value={shop.address} onChange={(e) => setShop((p) => ({ ...p, address: e.target.value }))} placeholder="Enter full address including city and postal code" />
-              {submitted && errors.address && <FieldWarning message={errors.address} />}
-              <p className="text-xs text-zinc-500 mt-1">Include street, district, city, and postal code for accuracy</p>
-            </div>
-          </SectionCard>
-
-          <SectionCard title="Operating Hours" icon={Clock}>
-            <div className="space-y-3">
-              <div className="flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-zinc-800">
-                <p className="text-xs text-zinc-400">Set hours for all open days at once:</p>
-                <div className="flex items-center gap-2">
-                  <input type="time" value={bulkOpen} onChange={(e) => setBulkOpen(e.target.value)} className="bg-zinc-800 border border-zinc-700 text-white text-xs rounded-lg px-2 py-1.5 focus:border-[#D4AF37] focus:outline-none" />
-                  <span className="text-zinc-500 text-xs">–</span>
-                  <input type="time" value={bulkClose} onChange={(e) => setBulkClose(e.target.value)} className="bg-zinc-800 border border-zinc-700 text-white text-xs rounded-lg px-2 py-1.5 focus:border-[#D4AF37] focus:outline-none" />
-                  <button onClick={applyToAll} className="px-3 py-1.5 bg-zinc-700 hover:bg-zinc-600 text-white text-xs font-semibold rounded-lg transition-colors">Apply All</button>
-                </div>
-              </div>
-              {shop.operatingHours.map((hour, i) => (
-                <div key={hour.day} className={`flex items-center gap-4 p-3 rounded-xl border transition-colors ${hour.isOpen ? "bg-zinc-800/50 border-zinc-700" : "bg-zinc-900 border-zinc-800 opacity-60"}`}>
-                  <button onClick={() => updateHour(i, "isOpen", !hour.isOpen)} className={`w-10 h-5 flex items-center rounded-full p-0.5 transition-colors ${hour.isOpen ? "bg-[#D4AF37] justify-end" : "bg-zinc-700 justify-start"}`}>
-                    <span className="w-4 h-4 bg-white rounded-full shadow transition-all" />
-                  </button>
-                  <span className={`w-24 text-sm font-semibold flex-shrink-0 ${hour.isOpen ? "text-white" : "text-zinc-500"}`}>{hour.day}</span>
-                  {hour.isOpen ? (
-                    <>
-                      <div className="flex items-center gap-2 flex-1">
-                        <input type="time" value={hour.openTime} onChange={(e) => updateHour(i, "openTime", e.target.value)} className="flex-1 bg-zinc-900 border border-zinc-700 text-white text-sm rounded-lg px-3 py-1.5 focus:border-[#D4AF37] focus:outline-none transition-colors" />
-                        <span className="text-zinc-500 text-sm flex-shrink-0">–</span>
-                        <input type="time" value={hour.closeTime} onChange={(e) => updateHour(i, "closeTime", e.target.value)} className={`flex-1 bg-zinc-900 border text-white text-sm rounded-lg px-3 py-1.5 focus:outline-none transition-colors ${errors[`hour_${i}`] ? "border-red-500" : "border-zinc-700 focus:border-[#D4AF37]"}`} />
-                      </div>
-                      {errors[`hour_${i}`] && <span title={errors[`hour_${i}`]}><AlertCircle size={16} className="text-red-400 flex-shrink-0" /></span>}
-                    </>
-                  ) : (
-                    <span className="text-sm text-zinc-500 italic">Closed</span>
-                  )}
-                </div>
-              ))}
-            </div>
-          </SectionCard>
-
-          <div className="flex gap-3 pb-8">
-            <button onClick={() => { setShop(savedShop); setSubmitted(false); }} disabled={!hasChanges} className="px-6 py-3 rounded-xl font-semibold border-2 border-zinc-700 text-zinc-300 hover:bg-zinc-800 transition-colors disabled:opacity-40 disabled:cursor-not-allowed">
-              Cancel
-            </button>
-            <button onClick={handleSave} disabled={isSaving || !hasChanges} className="flex-1 flex items-center justify-center py-3 bg-[#D4AF37] hover:bg-[#c9a227] text-black font-bold rounded-xl transition-all shadow-lg shadow-[#D4AF37]/20 disabled:opacity-40 disabled:cursor-not-allowed disabled:shadow-none">
-              {isSaving ? "Saving..." : "Save Changes"}
-            </button>
-          </div>
-
         </div>
+
+        {/* ── FULL WIDTH — Operating Hours ── */}
+        <SectionCard title="Operating Hours" icon={Clock}>
+          <div className="space-y-3">
+            <div className="flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-zinc-800">
+              <p className="text-xs text-zinc-400">Set hours for all open days at once:</p>
+              <div className="flex items-center gap-2">
+                <input type="time" value={bulkOpen} onChange={(e) => setBulkOpen(e.target.value)} className="bg-zinc-800 border border-zinc-700 text-white text-xs rounded-lg px-2 py-1.5 focus:border-[#D4AF37] focus:outline-none" />
+                <span className="text-zinc-500 text-xs">–</span>
+                <input type="time" value={bulkClose} onChange={(e) => setBulkClose(e.target.value)} className="bg-zinc-800 border border-zinc-700 text-white text-xs rounded-lg px-2 py-1.5 focus:border-[#D4AF37] focus:outline-none" />
+                <button onClick={applyToAll} className="px-3 py-1.5 bg-zinc-700 hover:bg-zinc-600 text-white text-xs font-semibold rounded-lg transition-colors">Apply All</button>
+              </div>
+            </div>
+            {shop.operatingHours.map((hour, i) => (
+              <div key={hour.day} className={`p-3 rounded-xl border transition-colors ${hour.isOpen ? "bg-zinc-800/50 border-zinc-700" : "bg-zinc-900 border-zinc-800 opacity-60"}`}>
+
+                {/* Baris 1: Nama hari */}
+                <span className={`block text-sm font-semibold mb-2 ${hour.isOpen ? "text-white" : "text-zinc-500"}`}>
+                  {hour.day}
+                </span>
+
+                {/* Baris 2: Toggle + jam */}
+                <div className="flex items-center gap-2 min-w-0">
+
+                  {/* Toggle */}
+                  <button
+                    onClick={() => updateHour(i, "isOpen", !hour.isOpen)}
+                    className={`w-28 h-7 flex-shrink-0 flex items-center rounded-full px-1 transition-colors duration-300 ${hour.isOpen ? "bg-[#D4AF37]" : "bg-zinc-700"}`}
+                  >
+                    <span className={`w-5 h-5 bg-white rounded-full shadow transition-transform duration-300 ease-in-out ${hour.isOpen ? "translate-x-[84px]" : "translate-x-0"}`} />
+                  </button>
+
+                  {/* Time inputs atau label "Closed" */}
+                  {hour.isOpen ? (
+                    <div className="flex items-center gap-1 flex-1 min-w-0">
+                      <input
+                        type="time"
+                        value={hour.openTime}
+                        onChange={(e) => updateHour(i, "openTime", e.target.value)}
+                        className="flex-1 min-w-0 bg-zinc-900 border border-zinc-700 text-white text-sm rounded-lg px-2 py-1.5 focus:border-[#D4AF37] focus:outline-none transition-colors"
+                      />
+                      <span className="text-zinc-500 text-sm flex-shrink-0">–</span>
+                      <input
+                        type="time"
+                        value={hour.closeTime}
+                        onChange={(e) => updateHour(i, "closeTime", e.target.value)}
+                        className={`flex-1 min-w-0 bg-zinc-900 border text-white text-sm rounded-lg px-2 py-1.5 focus:outline-none transition-colors ${errors[`hour_${i}`] ? "border-red-500" : "border-zinc-700 focus:border-[#D4AF37]"}`}
+                      />
+                      {errors[`hour_${i}`] && (
+                        <span title={errors[`hour_${i}`]}>
+                          <AlertCircle size={16} className="text-red-400 flex-shrink-0" />
+                        </span>
+                      )}
+                    </div>
+                  ) : (
+                    <span className="text-sm text-zinc-500 italic flex-1">Closed</span>
+                  )}
+
+                </div>
+              </div>
+            ))}
+          </div>
+        </SectionCard>
+
+        {/* ── BOTTOM: 2-column buttons ── */}
+        <div className="grid grid-cols-2 gap-3 pb-8">
+          <button
+            onClick={() => {
+              if (shop.photos[0]?.startsWith("blob:")) {
+                URL.revokeObjectURL(shop.photos[0]);
+              }
+              pendingGalleryUploads.forEach((p) => URL.revokeObjectURL(p.preview));
+              setPendingGalleryUploads([]);
+              setPendingGalleryDeletions([]);
+              setShop(savedShop);
+              setSubmitted(false);
+              setNewPhotoFile(null);
+            }}
+            disabled={!hasChanges}
+            className="w-full py-3 rounded-xl font-semibold border-2 border-zinc-700 text-zinc-300 hover:bg-zinc-800 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={handleSave}
+            disabled={isSaving || !hasChanges}
+            className="w-full flex items-center justify-center py-3 bg-[#D4AF37] hover:bg-[#c9a227] text-black font-bold rounded-xl transition-all shadow-lg shadow-[#D4AF37]/20 disabled:opacity-40 disabled:cursor-not-allowed disabled:shadow-none"
+          >
+            {isSaving ? "Saving..." : "Save Changes"}
+          </button>
+        </div>
+
       </div>
     </DashboardLayout>
   );

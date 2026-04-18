@@ -6,6 +6,8 @@ use App\Traits\BelongsToBarbershop;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
+use App\Models\Promo;
+
 class Service extends Model
 {
     use BelongsToBarbershop, SoftDeletes;
@@ -28,6 +30,16 @@ class Service extends Model
     public function bookings()
     {
         return $this->hasMany(Booking::class);
+    }
+
+    public function promos()
+    {
+        return $this->hasMany(Promo::class);
+    }
+
+    public function activePromo()
+    {
+        return $this->hasOne(Promo::class)->where('is_active', true)->latest();
     }
 
 }

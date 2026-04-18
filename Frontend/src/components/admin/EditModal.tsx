@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import Modal from './Modal';
-import { Save, X, AlertCircle } from 'lucide-react';
+import { Save, X, AlertCircle, Eye, EyeOff, User } from 'lucide-react';
 
 export type FieldType = 
   | 'text' 
@@ -21,9 +21,11 @@ export interface FormField {
   placeholder?: string;
   required?: boolean;
   disabled?: boolean;
+  readOnly?: boolean;
   options?: { value: string; label: string }[];
   rows?: number;
   accept?: string;
+  placeholderIcon?: React.ComponentType<{ size?: number; className?: string }>;
   validation?: (value: any, allData?: Record<string, any>) => string | null;
   helperText?: string;
   showAsterisk?: boolean;
@@ -40,6 +42,8 @@ export interface EditModalProps {
   saveButtonText?: string;
   cancelButtonText?: string;
   isLoading?: boolean;
+  serverErrors?: Record<string, string>;
+  hideFooter?: boolean;
 }
 
 const EditModal: React.FC<EditModalProps> = ({
@@ -53,16 +57,21 @@ const EditModal: React.FC<EditModalProps> = ({
   saveButtonText = 'Save Changes',
   cancelButtonText = 'Cancel',
   isLoading = false,
+  serverErrors = {},
+  hideFooter = false,
 }) => {
+
   const [formData, setFormData] = useState<Record<string, any>>(initialData);
   const [errors, setErrors]     = useState<Record<string, string>>({});
   const [submitted, setSubmitted] = useState(false);
+  const [showPasswordFields, setShowPasswordFields] = useState<Record<string, boolean>>({});
 
   useEffect(() => {
     if (isOpen) {
       setFormData(initialData);
       setErrors({});
       setSubmitted(false);
+      setShowPasswordFields({});
     }
   }, [isOpen]);
 
@@ -130,11 +139,12 @@ const EditModal: React.FC<EditModalProps> = ({
   };
 
   const renderField = (field: FormField) => {
-    const hasError = submitted && errors[field.name];
+    const hasError = (submitted && !!errors[field.name]) || !!serverErrors[field.name];
     const baseClass = `w-full px-4 py-3 bg-zinc-800 border rounded-xl text-white placeholder-zinc-500 
       focus:outline-none focus:ring-2 transition-colors
       ${hasError ? 'border-red-500 focus:ring-red-500' : 'border-zinc-700 focus:ring-amber-500'}
-      ${field.disabled ? 'opacity-50 cursor-not-allowed' : ''}`;
+      ${field.disabled ? 'opacity-50 cursor-not-allowed' : ''}
+      ${field.readOnly ? 'cursor-default' : ''}`;
 
     switch (field.type) {
       case 'textarea':
@@ -145,6 +155,7 @@ const EditModal: React.FC<EditModalProps> = ({
             placeholder={field.placeholder}
             rows={field.rows || 4}
             disabled={field.disabled}
+            readOnly={field.readOnly}
             className={`${baseClass} resize-none`}
           />
         );
@@ -155,7 +166,7 @@ const EditModal: React.FC<EditModalProps> = ({
             value={formData[field.name] || ''}
             onChange={(e) => handleChange(field.name, e.target.value)}
             disabled={field.disabled}
-            className={baseClass}
+            className={`${baseClass} ${field.readOnly ? 'pointer-events-none' : ''}`}
           >
             <option value="">Select {field.label}</option>
             {field.options?.map((option) => (
@@ -183,24 +194,64 @@ const EditModal: React.FC<EditModalProps> = ({
       case 'image':
       case 'file':
         return (
-          <div className="space-y-3">
-            {formData[field.name] && field.type === 'image' && (
+          <div className="flex flex-col items-center gap-3">
+            {formData[field.name] ? (
               <img
                 src={formData[field.name]}
                 alt="Preview"
-                className="w-32 h-32 object-cover rounded-lg border-2 border-zinc-700"
+                className="w-32 h-32 object-cover rounded-full border-2 border-zinc-700"
               />
+            ) : (
+              <div className="w-32 h-32 rounded-full bg-[#D4AF37]/10 border-2 border-[#D4AF37]/20 flex items-center justify-center text-[#D4AF37]">
+                {field.placeholderIcon
+                  ? <field.placeholderIcon size={48} />
+                  : <User size={48} />
+                }
+              </div>
             )}
-            <label className="cursor-pointer inline-block px-4 py-2 bg-zinc-800 text-white rounded-xl hover:bg-zinc-700 transition-colors">
-              <input
-                type="file"
-                accept={field.accept || (field.type === 'image' ? 'image/*' : '*')}
-                onChange={(e) => handleFileChange(field.name, e)}
-                disabled={field.disabled}
-                className="hidden"
-              />
-              Choose File
-            </label>
+            {!field.disabled && (
+              <label className="cursor-pointer inline-block px-4 py-2 bg-zinc-800 text-white rounded-xl hover:bg-zinc-700 transition-colors text-sm">
+                <input
+                  type="file"
+                  accept={field.accept || (field.type === 'image' ? 'image/*' : '*')}
+                  onChange={(e) => handleFileChange(field.name, e)}
+                  className="hidden"
+                />
+                Choose File
+              </label>
+            )}
+          </div>
+        );
+
+      case 'password':
+        return (
+          <div className="relative">
+            <input
+              type={showPasswordFields[field.name] ? 'text' : 'password'}
+              value={formData[field.name] || ''}
+              onChange={(e) => handleChange(field.name, e.target.value)}
+              placeholder={field.placeholder}
+              disabled={field.disabled}
+              autoComplete="new-password"
+              className={`${baseClass} pr-12`}
+            />
+            {!field.disabled && (
+              <button
+                type="button"
+                onClick={() =>
+                  setShowPasswordFields((prev) => ({
+                    ...prev,
+                    [field.name]: !prev[field.name],
+                  }))
+                }
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-400 hover:text-white transition-colors"
+                tabIndex={-1}
+              >
+                {showPasswordFields[field.name]
+                  ? <EyeOff size={18} />
+                  : <Eye size={18} />}
+              </button>
+            )}
           </div>
         );
 
@@ -212,6 +263,8 @@ const EditModal: React.FC<EditModalProps> = ({
             onChange={(e) => handleChange(field.name, e.target.value)}
             placeholder={field.placeholder}
             disabled={field.disabled}
+            readOnly={field.readOnly}
+            autoComplete={field.type === 'email' ? 'off' : undefined}
             className={baseClass}
           />
         );
@@ -273,10 +326,10 @@ const EditModal: React.FC<EditModalProps> = ({
       onClose={onClose}
       title={title}
       subtitle={subtitle}
-      footer={footer}
+      footer={hideFooter ? undefined : footer}
       size="md"
     >
-      <form onSubmit={handleSubmit} className="space-y-6">
+      <form onSubmit={handleSubmit} autoComplete="off" className="space-y-6">
         {fields.map((field) => {
           if (field.type === 'checkbox') {
             return (
@@ -301,10 +354,10 @@ const EditModal: React.FC<EditModalProps> = ({
               {field.helperText && !(submitted && errors[field.name]) && (
                 <p className="text-xs text-zinc-500">{field.helperText}</p>
               )}
-              {submitted && errors[field.name] && (
+              {((submitted && errors[field.name]) || serverErrors[field.name]) && (
                 <p className="flex items-center gap-1.5 text-xs text-red-400">
                   <AlertCircle className="w-3.5 h-3.5 flex-shrink-0" />
-                  {errors[field.name]}
+                  {errors[field.name] || serverErrors[field.name]}
                 </p>
               )}
             </div>

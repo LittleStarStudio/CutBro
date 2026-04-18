@@ -4,6 +4,11 @@ import { useIsMobile } from "@/hooks/useHooks";
 import { type LucideIcon, User, Settings, LogOut, Shield, Menu, ChevronDown } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useState, useRef, useEffect } from "react";
+import { useAuth } from "@/components/context/AuthContext";
+import { updateProfile, uploadAvatar } from "@/services/auth.service";
+import { getAppSettings, updateAppSettings, uploadAppLogo } from "@/services/appSettings.service";
+import type { AppSettings } from "@/services/appSettings.service";
+import { useAppSettings } from "@/components/context/AppSettingsContext";
 
 import type { MenuItem } from "@/components/layout/SideBar";
 import type { HeaderUser } from "@/components/layout/Header";
@@ -64,12 +69,36 @@ function CustomerBottomNav({ menuItems, user, onLogout }: BottomNavProps) {
     .filter((item) => !item.href?.includes("profile"))
     .slice(0, 4);
 
-  const initials = user?.name
-    ? user.name.split(" ").map((n) => n[0]).join("").toUpperCase().slice(0, 2)
-    : "U";
+    const { user: authUser, setUser } = useAuth();
+    const displayUser = authUser ?? user;
 
-  const profileData: Profile | undefined = user
-    ? { name: user.name, email: user.email, photoPreview: user.avatar ?? "" }
+    const initials = displayUser?.name
+      ? displayUser.name.split(" ").map((n) => n[0]).join("").toUpperCase().slice(0, 2)
+      : "U";
+
+    const handleProfileSave = async (updated: Profile): Promise<void> => {
+      let newAvatarUrl: string | undefined;
+      if (updated.photoFile) {
+        const result = await uploadAvatar(updated.photoFile);
+        newAvatarUrl = result.avatar_url;
+      }
+      if (updated.name !== (authUser?.name ?? user?.name) || updated.password) {
+        await updateProfile({
+          name: updated.name,
+          ...(updated.password ? { password: updated.password } : {}),
+        });
+      }
+      if (authUser) {
+        setUser({
+          ...authUser,
+          name: updated.name,
+          ...(newAvatarUrl ? { avatar: newAvatarUrl, avatar_url: newAvatarUrl } : {}),
+        });
+      }
+    };
+
+  const profileData: Profile | undefined = displayUser
+    ? { name: displayUser.name, email: displayUser.email, photoPreview: displayUser.avatar ?? "" }
     : undefined;
 
   return (
@@ -111,10 +140,10 @@ function CustomerBottomNav({ menuItems, user, onLogout }: BottomNavProps) {
           <div className="relative flex-1" ref={dropupRef}>
             {showDropup && (
               <div className="absolute bottom-full right-0 mb-3 w-56 bg-zinc-900 border border-zinc-800 rounded-2xl shadow-2xl overflow-hidden z-50 animate-[dropupIn_0.2s_cubic-bezier(.22,1,.36,1)_both]">
-                {user && (
+                {displayUser && (
                   <div className="px-4 py-3 border-b border-zinc-800">
-                    <p className="text-sm font-semibold text-white truncate">{user.name}</p>
-                    <p className="text-xs text-zinc-500 truncate">{user.email}</p>
+                    <p className="text-sm font-semibold text-white truncate">{displayUser.name}</p>
+                    <p className="text-xs text-zinc-500 truncate">{displayUser.email}</p>
                   </div>
                 )}
                 <div className="p-1.5 space-y-0.5">
@@ -155,8 +184,8 @@ function CustomerBottomNav({ menuItems, user, onLogout }: BottomNavProps) {
             >
               <div className="relative">
                 {showDropup && <span className="absolute inset-0 rounded-lg bg-[#D4AF37]/10 scale-150" aria-hidden="true" />}
-                {user?.avatar ? (
-                  <img src={user.avatar} alt="" className="relative z-10 w-[22px] h-[22px] rounded-full object-cover ring-1 ring-[#D4AF37]/40" />
+                {displayUser?.avatar ? (
+                  <img src={displayUser.avatar} alt="" className="relative z-10 w-[22px] h-[22px] rounded-full object-cover ring-1 ring-[#D4AF37]/40" />
                 ) : (
                   <div className={cn("relative z-10 w-[22px] h-[22px] rounded-full flex items-center justify-center text-[9px] font-bold text-white", showDropup ? "bg-[#D4AF37]" : "bg-zinc-600")}>
                     {initials}
@@ -172,7 +201,7 @@ function CustomerBottomNav({ menuItems, user, onLogout }: BottomNavProps) {
       </nav>
 
       {profileData && (
-        <ProfileModal open={showProfileModal} onClose={() => setShowProfileModal(false)} data={profileData} onSave={(d) => { console.log("Profile updated:", d); setShowProfileModal(false); }} />
+        <ProfileModal open={showProfileModal} onClose={() => setShowProfileModal(false)} data={profileData} onSave={handleProfileSave} />
       )}
       <SettingsModal open={showSettingsModal} onClose={() => setShowSettingsModal(false)} />
     </>
@@ -190,7 +219,9 @@ function StaffBottomNav({ menuItems, user, onLogout }: BottomNavProps) {
   const [expandedMenus,     setExpandedMenus]     = useState<string[]>([]);
   const [showProfileModal,  setShowProfileModal]  = useState(false);
   const [showSettingsModal, setShowSettingsModal] = useState(false);
-  const containerRef = useRef<HTMLDivElement>(null);
+  const containerRef                              = useRef<HTMLDivElement>(null);
+  const [appSettings, setAppSettings]             = useState<AppSettings | null>(null);
+
 
   useEffect(() => {
     function handleOutside(e: MouseEvent) {
@@ -204,23 +235,101 @@ function StaffBottomNav({ menuItems, user, onLogout }: BottomNavProps) {
 
   useEffect(() => { setOpenDropup(null); }, [pathname]);
 
-  const isAdmin  = user?.role === "admin";
-  const initials = user?.name
-    ? user.name.split(" ").map((n) => n[0]).join("").toUpperCase().slice(0, 2)
+  const { user: authUser, setUser } = useAuth();
+  const displayUser = authUser ?? user; 
+  const { refresh: refreshBranding } = useAppSettings();
+
+  const isAdmin  = displayUser?.role === "admin";
+  const initials = displayUser?.name
+    ? displayUser.name.split(" ").map((n) => n[0]).join("").toUpperCase().slice(0, 2)
     : "U";
 
-  const profileData: Profile | undefined = user
-    ? { name: user.name, email: user.email, photoPreview: user.avatar ?? "" }
+  const profileData: Profile | undefined = displayUser
+    ? { name: displayUser.name, email: displayUser.email, photoPreview: displayUser.avatar ?? "" }
     : undefined;
 
-  const adminProfileData: AdminProfile | undefined = user
-    ? { name: user.name, email: user.email, photoPreview: user.avatar ?? "" }
+  const adminProfileData: AdminProfile | undefined = displayUser
+    ? {
+        name: displayUser.name,
+        email: displayUser.email,
+        photoPreview: displayUser.avatar ?? "",
+        appName: appSettings?.app_name ?? "",
+        appWebsite: appSettings?.app_website ?? "",
+        appLogo: appSettings?.app_logo_url ?? "",
+      }
     : undefined;
 
   const toggleExpanded = (label: string) =>
     setExpandedMenus((prev) =>
       prev.includes(label) ? prev.filter((l) => l !== label) : [...prev, label]
     );
+
+  const handleProfileSave = async (updated: Profile): Promise<void> => {
+      let newAvatarUrl: string | undefined;
+      if (updated.photoFile) {
+        const result = await uploadAvatar(updated.photoFile);
+        newAvatarUrl = result.avatar_url;
+      }
+      if (updated.name !== (authUser?.name ?? user?.name) || updated.password) {
+        await updateProfile({
+          name: updated.name,
+          ...(updated.password ? { password: updated.password } : {}),
+        });
+      }
+      if (authUser) {
+        setUser({
+          ...authUser,
+          name: updated.name,
+          ...(newAvatarUrl ? { avatar: newAvatarUrl, avatar_url: newAvatarUrl } : {}),
+        });
+      }
+    };
+
+  const handleAdminSave = async (updated: AdminProfile): Promise<void> => {
+    let newAvatarUrl: string | undefined;
+    if (updated.photoFile) {
+      const result = await uploadAvatar(updated.photoFile);
+      newAvatarUrl = result.avatar_url;
+    }
+    if (updated.name !== (authUser?.name ?? user?.name) || updated.password) {
+      await updateProfile({
+        name: updated.name,
+        ...(updated.password ? { password: updated.password } : {}),
+      });
+    }
+    if (updated.logoFileObj) {
+      await uploadAppLogo(updated.logoFileObj);
+    }
+    const appChanged =
+      updated.appName !== appSettings?.app_name ||
+      updated.appWebsite !== (appSettings?.app_website ?? "");
+    if (appChanged) {
+      await updateAppSettings({
+        ...(updated.appName ? { app_name: updated.appName } : {}),
+        ...(updated.appWebsite !== undefined ? { app_website: updated.appWebsite || null } : {}),
+      });
+    }
+    if (authUser) {
+      setUser({
+        ...authUser,
+        name: updated.name,
+        ...(newAvatarUrl ? { avatar: newAvatarUrl, avatar_url: newAvatarUrl } : {}),
+      });
+
+      refreshBranding();
+    }
+  };
+
+  const openAdminProfileModal = async () => {
+    setOpenDropup(null);
+    if (isAdmin) {
+      try {
+        const settings = await getAppSettings();
+        setAppSettings(settings);
+      } catch {}
+    }
+    setTimeout(() => setShowProfileModal(true), 10);
+  };
 
   const handleNavItem = (href?: string) => {
     if (href) { setOpenDropup(null); navigate(href); }
@@ -336,16 +445,16 @@ function StaffBottomNav({ menuItems, user, onLogout }: BottomNavProps) {
           <div className="relative flex-1">
             {openDropup === "profile" && (
               <div className="dropup-in absolute bottom-full right-0 mb-3 w-56 bg-zinc-900 border border-zinc-800 rounded-2xl shadow-2xl overflow-hidden z-50">
-                {user && (
+                {displayUser && (
                   <div className="px-4 py-3 border-b border-zinc-800">
                     <div className="flex items-center gap-3">
                       <div className={cn("w-9 h-9 rounded-full flex items-center justify-center text-white text-xs font-bold shrink-0", isAdmin ? "bg-purple-600" : "bg-amber-500")}>
-                        {user.avatar ? <img src={user.avatar} alt="" className="w-full h-full rounded-full object-cover" /> : initials}
+                        {displayUser.avatar ? <img src={displayUser.avatar} alt="" className="w-full h-full rounded-full object-cover" /> : initials}
                       </div>
                       <div className="min-w-0">
-                        <p className="text-sm font-semibold text-white truncate">{user.name}</p>
+                        <p className="text-sm font-semibold text-white truncate">{displayUser.name}</p>
                         <p className={cn("text-xs truncate", isAdmin ? "text-purple-400" : "text-zinc-500")}>
-                          {isAdmin ? "Administrator" : (user.role ?? "Member")}
+                          {isAdmin ? "Administrator" : (displayUser.role ?? "Member")}
                         </p>
                       </div>
                     </div>
@@ -358,14 +467,16 @@ function StaffBottomNav({ menuItems, user, onLogout }: BottomNavProps) {
                   </div>
                 )}
                 <div className="p-1.5 space-y-0.5">
-                  <button onClick={() => { setOpenDropup(null); setTimeout(() => setShowProfileModal(true), 10); }} className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-zinc-300 hover:text-white hover:bg-zinc-800 transition-colors text-sm">
+                  <button onClick={openAdminProfileModal} className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-zinc-300 hover:text-white hover:bg-zinc-800 transition-colors text-sm">
                     <User size={15} className="text-zinc-500 shrink-0" />
                     {isAdmin ? "Profile & App Settings" : "My Profile"}
                   </button>
-                  <button onClick={() => { setOpenDropup(null); setTimeout(() => setShowSettingsModal(true), 10); }} className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-zinc-300 hover:text-white hover:bg-zinc-800 transition-colors text-sm">
-                    <Settings size={15} className="text-zinc-500 shrink-0" />
-                    Settings
-                  </button>
+                  {!isAdmin && (
+                    <button onClick={() => { setOpenDropup(null); setTimeout(() => setShowSettingsModal(true), 10); }} className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-zinc-300 hover:text-white hover:bg-zinc-800 transition-colors text-sm">
+                      <Settings size={15} className="text-zinc-500 shrink-0" />
+                      Settings
+                    </button>
+                  )}
                 </div>
                 <div className="p-1.5 border-t border-zinc-800">
                   <button onClick={() => { setOpenDropup(null); onLogout?.(); }} className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-red-400 hover:text-red-300 hover:bg-red-500/10 transition-colors text-sm">
@@ -385,8 +496,8 @@ function StaffBottomNav({ menuItems, user, onLogout }: BottomNavProps) {
             >
               <div className="relative">
                 {openDropup === "profile" && <span className="absolute inset-0 rounded-lg bg-[#D4AF37]/10 scale-150" aria-hidden="true" />}
-                {user?.avatar ? (
-                  <img src={user.avatar} alt="" className="relative z-10 w-[22px] h-[22px] rounded-full object-cover ring-1 ring-[#D4AF37]/40" />
+                {displayUser?.avatar ? (
+                  <img src={displayUser.avatar} alt="" className="relative z-10 w-[22px] h-[22px] rounded-full object-cover ring-1 ring-[#D4AF37]/40" />
                 ) : (
                   <div className={cn("relative z-10 w-[22px] h-[22px] rounded-full flex items-center justify-center text-[9px] font-bold text-white", openDropup === "profile" ? (isAdmin ? "bg-purple-500" : "bg-[#D4AF37]") : (isAdmin ? "bg-purple-600/70" : "bg-zinc-600"))}>
                     {initials}
@@ -401,9 +512,9 @@ function StaffBottomNav({ menuItems, user, onLogout }: BottomNavProps) {
       </nav>
 
       {isAdmin && adminProfileData ? (
-        <AdminProfileModal open={showProfileModal} onClose={() => setShowProfileModal(false)} data={adminProfileData} onSave={(d) => { console.log("Admin updated:", d); setShowProfileModal(false); }} />
+        <AdminProfileModal open={showProfileModal} onClose={() => setShowProfileModal(false)} data={adminProfileData} onSave={handleAdminSave} />
       ) : profileData ? (
-        <ProfileModal open={showProfileModal} onClose={() => setShowProfileModal(false)} data={profileData} onSave={(d) => { console.log("Profile updated:", d); setShowProfileModal(false); }} />
+        <ProfileModal open={showProfileModal} onClose={() => setShowProfileModal(false)} data={profileData} onSave={handleProfileSave} />
       ) : null}
       <SettingsModal open={showSettingsModal} onClose={() => setShowSettingsModal(false)} isAdmin={isAdmin} />
     </>

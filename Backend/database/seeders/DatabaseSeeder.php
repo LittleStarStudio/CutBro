@@ -21,13 +21,15 @@ class DatabaseSeeder extends Seeder
             ServiceCategorySeeder::class,
             ServiceSeeder::class,
 
-            ShiftSeeder::class,
-            BarberShiftAssignmentSeeder::class,
-
             OperationalHourSeeder::class,
+            // ShiftSeeder::class,                    
+            // BarberShiftAssignmentSeeder::class,    
 
             BookingSeeder::class,
             BarbershopUserBlockSeeder::class,
+            RefundRequestSeeder::class,
+
+            SubscriptionPlanSeeder::class,
         ]);
         
     }

@@ -1,15 +1,17 @@
 import DashboardLayout from "@/components/dashboard/DashboardLayout";
 import { useState, useEffect, useMemo } from "react";
-import { Tag, Plus } from "lucide-react";
+import { Tag, Plus, CheckCircle, XCircle, Percent } from "lucide-react";
+import StatCard from "@/components/admin/StatsCard";
 
 import { ownerLogo, ownerMenu } from "@/components/config/Menu";
-import { logout, getUser } from "@/lib/auth";
+import { useAuth } from "@/components/context/AuthContext";
+import * as ownerService from "@/services/owner.service";
 
 import { searchInObject } from "@/lib/utils/AdminUtils";
 
 import DeleteModal from "@/components/admin/DeleteModal";
 import ActionButtons from "@/components/admin/ActionButtons";
-import EditModal, { type FormField } from "@/components/admin/EditModal";
+import PromoModal from "@/components/admin/PromoModal";
 
 import PageHeader from "@/components/admin/PageHeader";
 import TableCard from "@/components/admin/TableCard";
@@ -22,30 +24,21 @@ import { useToast } from "@/components/ui/Toast";
 /* ================= TYPES ================= */
 interface Promo {
   id: number;
+  serviceId: number | null;
   serviceName: string;
   originalPrice: number;
   discount: number;
   finalPrice: number;
+  status: "active" | "inactive";
 }
 
-/* ================= DUMMY DATA ================= */
-const DUMMY_PROMOS: Promo[] = [
-  { id: 1, serviceName: "Premium Haircut", originalPrice: 75000,  discount: 20, finalPrice: 60000  },
-  { id: 2, serviceName: "Hair Coloring",   originalPrice: 200000, discount: 15, finalPrice: 170000 },
-  { id: 3, serviceName: "Deluxe Package",  originalPrice: 150000, discount: 25, finalPrice: 112500 },
-  { id: 4, serviceName: "Beard Trim",      originalPrice: 35000,  discount: 10, finalPrice: 31500  },
-  { id: 5, serviceName: "Basic Haircut",   originalPrice: 50000,  discount: 30, finalPrice: 35000  },
-];
-
 const formatPrice = (price: number) => `Rp ${price.toLocaleString("id-ID")}`;
-
-const calculateFinalPrice = (originalPrice: number, discount: number): number =>
-  Math.round(originalPrice - (originalPrice * discount / 100));
 
 export default function OwnerPromos() {
   const toast = useToast();
 
   const [promos, setPromos]           = useState<Promo[]>([]);
+  const [services, setServices] = useState<{ id: number; name: string; price: number }[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
 
   const [showDeleteModal, setShowDeleteModal] = useState(false);
@@ -54,69 +47,70 @@ export default function OwnerPromos() {
   const [selectedPromo, setSelectedPromo]     = useState<Promo | null>(null);
   const [isLoading, setIsLoading]             = useState(false);
 
-  const currentUser = getUser();
+  const { user, logout } = useAuth();
 
-  useEffect(() => { setPromos(DUMMY_PROMOS); }, []);
+  const loadPromos = () => {
+    ownerService.getServices().then((data) => {
+      setServices(
+        data
+          .filter((s) => s.is_active)             
+          .map((s) => ({
+            id:    s.id,
+            name:  s.name,
+            price: typeof s.price === "string" ? parseFloat(s.price) : s.price,
+          }))
+      );
+    }).catch(() => {});
+
+    ownerService.getPromos().then((data) => {
+      setPromos(data.map((p) => ({
+        id:            p.id,
+        serviceId:     p.service_id,    
+        serviceName:   p.name,
+        originalPrice: p.original_price,
+        discount:      p.discount_percent,
+        finalPrice:    p.final_price,
+        status:        p.is_active ? "active" : "inactive",
+      })));
+    }).catch(() => {});
+  };
+
+  useEffect(() => { loadPromos(); }, []);
 
   const filteredPromos = useMemo(() => {
     return promos.filter((promo) => searchInObject(promo, searchQuery, ["serviceName"]));
   }, [promos, searchQuery]);
 
-  const formFields: FormField[] = [
-    {
-      name: "serviceName",
-      label: "Service Name",
-      type: "text",
-      placeholder: "e.g., Premium Haircut",
-      required: true,
-      validation: (value) => value.length >= 3 ? null : "Service name must be at least 3 characters",
-    },
-    {
-      name: "originalPrice",
-      label: "Original Price (Rp)",
-      type: "number",
-      placeholder: "75000",
-      required: true,
-      validation: (value) => {
-        const num = parseInt(value);
-        if (isNaN(num)) return "Price must be a number";
-        if (num < 1000) return "Price must be at least Rp 1,000";
-        return null;
-      },
-      helperText: "Enter price in Rupiah (without Rp or commas)",
-    },
-    {
-      name: "discount",
-      label: "Discount (%)",
-      type: "number",
-      placeholder: "20",
-      required: true,
-      validation: (value) => {
-        const num = parseInt(value);
-        if (isNaN(num)) return "Discount must be a number";
-        if (num < 1)    return "Discount must be at least 1%";
-        if (num > 99)   return "Discount cannot exceed 99%";
-        return null;
-      },
-      helperText: "Discount percentage (1-99%)",
-    },
-  ];
+  // Set berisi service_id yang sudah punya promo
+  const takenServiceIds = useMemo(() => {
+    return new Set(
+      promos.map((p) => p.serviceId).filter((id): id is number => id !== null)
+    );
+  }, [promos]);
+
+  const stats = useMemo(() => ({
+    total:    promos.length,
+    active:   promos.filter((p) => p.status === "active").length,
+    inactive: promos.filter((p) => p.status === "inactive").length,
+  }), [promos]);
 
   /* ================= ADD ================= */
   const handleAddClick = () => setShowAddModal(true);
 
-  const handleSaveAdd = async (data: Record<string, any>) => {
+  const handleSaveAdd = async (data: { serviceId: number; discount: number; status: "active" | "inactive" }) => {
     setIsLoading(true);
     try {
-      await new Promise((resolve) => setTimeout(resolve, 1500));
-      const newId        = Math.max(...promos.map((p) => p.id), 0) + 1;
-      const originalPrice = parseInt(data.originalPrice);
-      const discount      = parseInt(data.discount);
-      setPromos((prev) => [...prev, { id: newId, serviceName: data.serviceName, originalPrice, discount, finalPrice: calculateFinalPrice(originalPrice, discount) }]);
+      await ownerService.createPromo({
+        service_id:       data.serviceId,
+        discount_percent: data.discount,
+        is_active:        data.status === "active",
+      });
+      loadPromos();
       setShowAddModal(false);
-      toast.success("Promo Added", `${data.serviceName} promo has been added.`);
-    } catch {
-      toast.error("Add Failed", "Something went wrong. Please try again.");
+      toast.success("Promo Added", "New promo has been added.");
+    } catch (err: any) {
+      const msg = err?.response?.data?.message ?? "Something went wrong. Please try again.";
+      toast.error("Add Failed", msg);
     } finally {
       setIsLoading(false);
     }
@@ -128,24 +122,22 @@ export default function OwnerPromos() {
     setShowEditModal(true);
   };
 
-  const handleSaveEdit = async (data: Record<string, any>) => {
+  const handleSaveEdit = async (data: { serviceId: number; discount: number; status: "active" | "inactive" }) => {
+    if (!selectedPromo) return;
     setIsLoading(true);
     try {
-      await new Promise((resolve) => setTimeout(resolve, 1500));
-      const originalPrice = parseInt(data.originalPrice);
-      const discount      = parseInt(data.discount);
-      setPromos((prev) =>
-        prev.map((promo) =>
-          promo.id === selectedPromo?.id
-            ? { ...promo, serviceName: data.serviceName, originalPrice, discount, finalPrice: calculateFinalPrice(originalPrice, discount) }
-            : promo
-        )
-      );
+      await ownerService.updatePromo(selectedPromo.id, {
+        service_id:       data.serviceId,
+        discount_percent: data.discount,
+        is_active:        data.status === "active",
+      });
+      loadPromos();
       setShowEditModal(false);
-      toast.success("Promo Updated", `${data.serviceName} promo has been updated.`);
+      toast.success("Promo Updated", "Promo has been updated.");
       setSelectedPromo(null);
-    } catch {
-      toast.error("Update Failed", "Something went wrong. Please try again.");
+    } catch (err: any) {
+      const msg = err?.response?.data?.message ?? "Something went wrong. Please try again.";
+      toast.error("Update Failed", msg);
     } finally {
       setIsLoading(false);
     }
@@ -157,13 +149,19 @@ export default function OwnerPromos() {
     setShowDeleteModal(true);
   };
 
-  const handleConfirmDelete = () => {
+  const handleConfirmDelete = async () => {
     if (!selectedPromo) return;
     const name = selectedPromo.serviceName;
-    setPromos((prev) => prev.filter((p) => p.id !== selectedPromo.id));
+    try {
+      await ownerService.deletePromo(selectedPromo.id);
+      loadPromos();
+      toast.success("Promo Deleted", `${name} promo has been removed.`);
+    } catch (err: any) {
+      const msg = err?.response?.data?.message ?? "Something went wrong. Please try again.";
+      toast.error("Delete Failed", msg);
+    }
     setShowDeleteModal(false);
     setSelectedPromo(null);
-    toast.success("Promo Deleted", `${name} promo has been removed.`);
   };
 
   const handleCancelDelete = () => {
@@ -172,16 +170,28 @@ export default function OwnerPromos() {
   };
 
   const columns = [
-    { key: "no", header: "No", headerClassName: "text-left w-16", render: (promo: Promo) => <span className="text-[#B8B8B8]">{filteredPromos.findIndex((p) => p.id === promo.id) + 1}</span> },
     { key: "serviceName",   header: "Service Name",   render: (promo: Promo) => <span className="text-white font-semibold">{promo.serviceName}</span> },
     { key: "originalPrice", header: "Original Price", render: (promo: Promo) => <span className="text-[#B8B8B8]">{formatPrice(promo.originalPrice)}</span> },
     { key: "discount",      header: "Discount",       render: (promo: Promo) => <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-bold bg-red-500/10 text-red-500 border border-red-500/20">{promo.discount}% OFF</span> },
     { key: "finalPrice",    header: "Final Price",    render: (promo: Promo) => <span className="text-[#D4AF37] font-bold text-base">{formatPrice(promo.finalPrice)}</span> },
     {
+      key: "status",
+      header: "Status",
+      render: (promo: Promo) => (
+        <span className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-medium ${
+          promo.status === "active"
+            ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20"
+            : "bg-zinc-700/50 text-zinc-400 border border-zinc-600"
+        }`}>
+          {promo.status === "active" ? "Active" : "Inactive"}
+        </span>
+      ),
+    },
+    {
       key: "actions",
       header: "Actions",
-      headerClassName: "text-right",
-      className: "text-right",
+      headerClassName: "text-center",
+      className: "text-center",
       render: (promo: Promo) => (
         <ActionButtons actions={[
           { type: "edit",   onClick: () => handleEditClick(promo)   },
@@ -198,13 +208,20 @@ export default function OwnerPromos() {
       showSidebar
       menuItems={ownerMenu}
       logo={ownerLogo}
-      userProfile={currentUser ?? { name: "owner", email: "owner@cutbro.com", role: "owner" }}
+      userProfile={user ?? { name: "owner", email: "owner@cutbro.com", role: "owner" }}
       showNotification
       notificationCount={3}
       onLogout={logout}
     >
       <div className="w-full space-y-6 lg:space-y-8">
         <PageHeader actionButton={{ label: "Add Promo", onClick: handleAddClick, icon: Plus }} title={""} />
+
+        {/* Stats Cards */}
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 lg:gap-6">
+          <StatCard icon={Percent}     title="Total Promos"      value={stats.total} />
+          <StatCard icon={CheckCircle} title="Active"        value={stats.active}   iconBgColor="bg-emerald-500/10" iconColor="text-emerald-400" />
+          <StatCard icon={XCircle}     title="Inactive"      value={stats.inactive} iconBgColor="bg-zinc-700/50"    iconColor="text-zinc-400" />
+        </div>
 
         <TableCard
           searchQuery={searchQuery}
@@ -219,26 +236,49 @@ export default function OwnerPromos() {
           <DataTable data={filteredPromos} columns={columns} />
           <MobileCardList
             data={filteredPromos}
-            renderCard={(promo: Promo) => {
-              const index = filteredPromos.findIndex((p) => p.id === promo.id);
-              return (
-                <MobileCard
-                  title={<div><p className="text-xs text-[#B8B8B8] mb-1">#{index + 1}</p><p className="font-semibold text-white">{promo.serviceName}</p></div>}
-                  headerRight={<span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-bold bg-red-500/10 text-red-500 border border-red-500/20">{promo.discount}% OFF</span>}
-                  fields={[
-                    { label: "Original Price", value: formatPrice(promo.originalPrice) },
-                    { label: "Final Price",    value: <span className="text-[#D4AF37] font-bold">{formatPrice(promo.finalPrice)}</span> },
-                  ]}
-                  actions={<ActionButtons actions={[{ type: "edit", onClick: () => handleEditClick(promo) }, { type: "delete", onClick: () => handleDeleteClick(promo) }]} />}
-                />
-              );
-            }}
+            renderCard={(promo: Promo) => (
+              <MobileCard
+                title={<p className="font-semibold text-white">{promo.serviceName}</p>}
+                headerRight={<span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-bold bg-red-500/10 text-red-500 border border-red-500/20">{promo.discount}% OFF</span>}
+                fields={[
+                  { label: "Original Price", value: formatPrice(promo.originalPrice) },
+                  { label: "Final Price",    value: <span className="text-[#D4AF37] font-bold">{formatPrice(promo.finalPrice)}</span> },
+                ]}
+                actions={<div className="flex justify-end"><ActionButtons actions={[{ type: "edit", onClick: () => handleEditClick(promo) }, { type: "delete", onClick: () => handleDeleteClick(promo) }]} /></div>}
+              />
+            )}
           />
         </TableCard>
       </div>
 
-      <EditModal isOpen={showAddModal} onClose={() => setShowAddModal(false)} onSave={handleSaveAdd} title="Add New Promo" subtitle="Create a promotional offer - final price will be calculated automatically" fields={formFields} initialData={{ serviceName: "", originalPrice: "", discount: "" }} isLoading={isLoading} saveButtonText="Add Promo" />
-      <EditModal isOpen={showEditModal} onClose={() => { setShowEditModal(false); setSelectedPromo(null); }} onSave={handleSaveEdit} title="Edit Promo" subtitle="Update promotional offer - final price will be recalculated" fields={formFields} initialData={selectedPromo || {}} isLoading={isLoading} saveButtonText="Save Changes" />
+      <PromoModal
+        isOpen={showAddModal}
+        onClose={() => setShowAddModal(false)}
+        onSave={handleSaveAdd}
+        title="Add New Promo"
+        subtitle="Select a service and set discount percentage"
+        services={services.filter((s) => !takenServiceIds.has(s.id))}
+        initialData={{ serviceId: null, discount: "", status: "active" }}
+        isLoading={isLoading}
+        saveButtonText="Add Promo"
+      />
+      <PromoModal
+        isOpen={showEditModal}
+        onClose={() => { setShowEditModal(false); setSelectedPromo(null); }}
+        onSave={handleSaveEdit}
+        title="Edit Promo"
+        subtitle="Update service and discount"
+        services={services.filter(
+          (s) => !takenServiceIds.has(s.id) || s.id === selectedPromo?.serviceId
+        )}
+        initialData={selectedPromo ? {
+          serviceId: selectedPromo.serviceId,
+          discount:  selectedPromo.discount,
+          status:    selectedPromo.status,
+        } : undefined}
+        isLoading={isLoading}
+        saveButtonText="Save Changes"
+      />
       <DeleteModal isOpen={showDeleteModal} title="Delete Promo" itemName={selectedPromo?.serviceName || ""} onConfirm={handleConfirmDelete} onCancel={handleCancelDelete} />
     </DashboardLayout>
   );

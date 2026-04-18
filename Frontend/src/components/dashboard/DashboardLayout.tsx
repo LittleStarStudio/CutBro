@@ -7,6 +7,7 @@ import { useLocation } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 
 import Sidebar from "@/components/layout/SideBar";
+import { useAppSettings } from "@/components/context/AppSettingsContext";
 import type { MenuItem } from "@/components/layout/SideBar";
 
 import Header from "@/components/layout/Header";
@@ -80,6 +81,8 @@ export default function DashboardLayout({
     () => typeof window !== "undefined" && window.innerWidth >= BREAKPOINT
   );
 
+  const { appLogoUrl } = useAppSettings();
+
   useEffect(() => {
     if (!isMobile) {
       setSidebarOpen(true);
@@ -110,7 +113,7 @@ export default function DashboardLayout({
           isOpen={sidebarOpen}
           onClose={() => setSidebarOpen(false)}
           menuItems={menuItems}
-          logo={logo}
+          logo={logo ? { ...logo, imageUrl: appLogoUrl ?? undefined } : undefined}
           onLogout={onLogout}
         />
       )}

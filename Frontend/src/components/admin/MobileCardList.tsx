@@ -37,11 +37,14 @@ export default function MobileCardList<T extends { id: number | string }>({
       {/* Pagination Footer — sama persis dengan DataTable */}
       <div className="flex items-center justify-between px-1 py-3 border-t border-[#2A2A2A] mt-2">
         {/* Info */}
-        <p className="text-xs text-[#B8B8B8]">
-          Menampilkan{" "}
+        <p className="text-sm text-[#B8B8B8]">
+          Showing{" "}
           <span className="text-white font-medium">
             {totalItems === 0 ? 0 : startIndex + 1}–{endIndex}
           </span>
+          {" "}of{" "}
+          <span className="text-white font-medium">{totalItems}</span>
+          {" "}data
         </p>
 
         {/* Controls */}

@@ -73,7 +73,7 @@ export function HowItWorksSection() {
           </h2>
 
           <p className="text-base sm:text-lg md:text-xl text-neutral-400 leading-relaxed px-2 sm:px-0">
-            Choose your role and start enjoying the convenience of BarberBook.
+            Choose your role and start enjoying the convenience of CutBro.
           </p>
         </div>
 

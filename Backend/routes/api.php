@@ -1,21 +1,53 @@
 <?php
 
 use Illuminate\Support\Facades\Route;
+
 use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\ProfileController;
+use App\Http\Controllers\Api\NotificationController;
 use App\Http\Controllers\Api\BarbershopController;
+
 use App\Http\Controllers\Api\Owner\ServiceCategoryController;
 use App\Http\Controllers\Api\Owner\ServiceController;
 use App\Http\Controllers\Api\Owner\BarberController;
-
+use App\Http\Controllers\Api\Owner\DashboardController as OwnerDashboardController;
+use App\Http\Controllers\Api\Owner\BarbershopProfileController;
+use App\Http\Controllers\Api\Owner\ShiftController as OwnerShiftController;
+use App\Http\Controllers\Api\Owner\ShiftAssignmentController;
+use App\Http\Controllers\Api\Owner\ScheduleController as OwnerScheduleController;
+use App\Http\Controllers\Api\Owner\PromoController;
+use App\Http\Controllers\Api\Owner\CustomerController as OwnerCustomerController;
+use App\Http\Controllers\Api\Owner\PaymentSettingController;
+use App\Http\Controllers\Api\Owner\TransactionController as OwnerTransactionController;
+use App\Http\Controllers\Api\Owner\RefundController;
+use App\Http\Controllers\Api\Owner\BarberReportController;
 use App\Http\Controllers\Api\Owner\BookingController as OwnerBookingController;
-use App\Http\Controllers\Api\Customer\BookingController as CustomerBookingController;
-
 use App\Http\Controllers\Api\Owner\ListBookingController as OwnerListBookingController;
+use App\Http\Controllers\Api\Owner\SubscriptionController as OwnerSubscriptionController;
+use App\Http\Controllers\Api\Owner\BarbershopPhotoController;
+
+use App\Http\Controllers\Api\Admin\BarbershopController as AdminBarbershopController;
+use App\Http\Controllers\Api\Admin\UserController as AdminUserController;
+use App\Http\Controllers\Api\Admin\LoginLogController as AdminLoginLogController;
+use App\Http\Controllers\Api\Admin\SubscriptionPlanController as AdminSubscriptionPlanController;
+use App\Http\Controllers\Api\Admin\TransactionController as AdminTransactionController;
+use App\Http\Controllers\Api\Admin\AppSettingController;
+
+use App\Http\Controllers\Api\Barber\DashboardController;
+use App\Http\Controllers\Api\Barber\AttendanceController as BarberAttendanceController;
+use App\Http\Controllers\Api\Barber\BarbershopController as BarberWorkPlaceController;
+use App\Http\Controllers\Api\Barber\BookingController as BarberBookingController;
+
+use App\Http\Controllers\Api\Customer\BookingController as CustomerBookingController;
 use App\Http\Controllers\Api\Customer\ListBookingController as CustomerListBookingController;
+
+use App\Http\Controllers\Api\Public\BarbershopPublicController;
 
 use App\Models\User;
 use Illuminate\Http\Request;
+
+// Public — tidak perlu auth
+Route::get('/app-settings/public', [AppSettingController::class, 'index']);
 
 // Users Verification (API)
 /**
@@ -32,34 +64,28 @@ use Illuminate\Http\Request;
  */
 Route::get('/auth/verify-email/{id}/{hash}', function (Request $request, $id, $hash) {
 
-    $user = User::findOrFail($id);
+    $frontendUrl = config('app.frontend_url');
 
-    // Validasi hash
-    if (! hash_equals(
-        sha1($user->getEmailForVerification()),
-        $hash
-    )) {
-        return response()->json([
-            'success' => false,
-            'message' => 'Invalid verification link'
-        ], 403);
+    if (! $request->hasValidSignature()) {
+        return redirect($frontendUrl . '/verify-email?status=invalid');
     }
 
-    // Jika sudah diverifikasi
+    $user = User::find($id);
+
+    if (! $user) {
+        return redirect($frontendUrl . '/verify-email?status=invalid');
+    }
+
+    if (! hash_equals(sha1($user->getEmailForVerification()), $hash)) {
+        return redirect($frontendUrl . '/verify-email?status=invalid');
+    }
+
     if ($user->hasVerifiedEmail()) {
-        return response()->json([
-            'success' => true,
-            'message' => 'Email already verified'
-        ]);
+        return redirect($frontendUrl . '/verify-email?status=already_verified');
     }
 
-    // Tandai verified
     $user->markEmailAsVerified();
-
-    return response()->json([
-        'success' => true,
-        'message' => 'Email verified successfully'
-    ]);
+    return redirect($frontendUrl . '/verify-email?status=success');
 
 })->name('verification.verify');
 
@@ -100,6 +126,7 @@ Route::prefix('auth')->group(function () {
         Route::post('/set-password', [AuthController::class,'setPassword']);
 
         Route::patch('/profile', [ProfileController::class,'update']);
+        Route::post('/profile/avatar', [ProfileController::class, 'avatar']);
 
         Route::post('/block-user', [AuthController::class,'blockUser']);
         Route::patch('/users/{id}/status', [AuthController::class,'updateStatus']);
@@ -109,9 +136,20 @@ Route::prefix('auth')->group(function () {
 });
 
 // Barbershop
+// Public: Browse barbershops
 Route::prefix('barbershops')->group(function () {
-    Route::get('/', [BarbershopController::class, 'index']);
-    Route::get('/{slug}', [BarbershopController::class, 'show']);
+    Route::get('/', [BarbershopPublicController::class, 'index']);
+    Route::get('/{id}', [BarbershopPublicController::class, 'show']);
+    Route::get('/{id}/available-slots', [BarbershopPublicController::class, 'availableSlots']);
+});
+
+
+// Notifications (all authenticated roles)
+Route::prefix('notifications')->middleware(['auth:sanctum', 'verified.api', 'token.expired'])->group(function () {
+    Route::get('/', [NotificationController::class, 'index']);
+    Route::get('/unread-count', [NotificationController::class, 'unreadCount']);
+    Route::patch('/read-all', [NotificationController::class, 'markAllRead']);
+    Route::patch('/{notification}/read', [NotificationController::class, 'markRead']);
 });
 
 // Owner
@@ -141,7 +179,104 @@ Route::prefix('owner')->group(function () {
         Route::get('/bookings', [OwnerListBookingController::class, 'index']);
         Route::patch('/bookings/{booking}/status', [OwnerBookingController::class, 'updateStatus']);
 
+        // Dashboard stats
+        Route::get('/dashboard', [OwnerDashboardController::class, 'stats']);
+
+        // Barbershop profile + operational hours
+        Route::get('/barbershop', [BarbershopProfileController::class, 'show']);
+        Route::post('/barbershop', [BarbershopProfileController::class, 'update']);
+        Route::post('/barbershop/photos', [BarbershopPhotoController::class, 'store']);
+        Route::delete('/barbershop/photos/{id}', [BarbershopPhotoController::class, 'destroy']);
+
+        // Shifts (3 preset: morning, afternoon, evening)
+        Route::get('/shifts', [OwnerShiftController::class, 'index']);
+        Route::put('/shifts', [OwnerShiftController::class, 'upsert']);
+
+        // Shift assignments (barber per hari)
+        Route::get('/shift-assignments', [ShiftAssignmentController::class, 'index']);
+        Route::post('/shift-assignments', [ShiftAssignmentController::class, 'store']);
+        Route::put('/shift-assignments/{assignment}', [ShiftAssignmentController::class, 'update']);
+        Route::delete('/shift-assignments/{assignment}', [ShiftAssignmentController::class, 'destroy']);
+
+        // Schedule (attendance monitor — read-only)
+        Route::get('/schedule', [OwnerScheduleController::class, 'index']);
+        Route::put('/schedule/{assignmentId}/attendance', [OwnerScheduleController::class, 'updateAttendance']);
+
+        // Promos
+        Route::get('/promos', [PromoController::class, 'index']);
+        Route::post('/promos', [PromoController::class, 'store']);
+        Route::put('/promos/{promo}', [PromoController::class, 'update']);
+        Route::delete('/promos/{promo}', [PromoController::class, 'destroy']);
+
+        // Customers
+        Route::get('/customers', [OwnerCustomerController::class, 'index']);
+        Route::patch('/customers/{user}/status', [OwnerCustomerController::class, 'updateStatus']);
+
+        // Payment settings
+        Route::get('/payment-settings', [PaymentSettingController::class, 'show']);
+        Route::put('/payment-settings', [PaymentSettingController::class, 'upsert']);
+
+        // Transactions
+        Route::get('/transactions', [OwnerTransactionController::class, 'index']);
+
+        // Refunds
+        Route::get('/refunds', [RefundController::class, 'index']);
+        Route::patch('/refunds/{booking}/status', [RefundController::class, 'updateStatus']);
+        Route::post('/refund-requests/{refundRequest}/forward',      [RefundController::class, 'forward']);
+        Route::post('/refund-requests/{refundRequest}/owner-reject', [RefundController::class, 'ownerReject']);
+
+        // Barber report
+        Route::get('/barbers/report', [BarberReportController::class, 'index']);
+
+        // Subscription
+        Route::get('/subscription', [OwnerSubscriptionController::class, 'index']);
+        Route::post('/subscription/checkout', [OwnerSubscriptionController::class, 'checkout']);
+        Route::post('/subscription/activate', [OwnerSubscriptionController::class, 'activate']);
+        Route::post('/subscription/refund-request', [OwnerSubscriptionController::class, 'requestRefund']);
+
     });
+});
+
+// Admin
+Route::prefix('admin')->middleware(['auth:sanctum', 'verified.api', 'token.expired', 'role:super_admin'])->group(function () {
+
+    // Barbershop management
+    Route::get('/barbershops/stats', [AdminBarbershopController::class, 'stats']);
+    Route::get('/barbershops', [AdminBarbershopController::class, 'index']);
+    Route::put('/barbershops/{id}', [AdminBarbershopController::class, 'update']);
+    Route::delete('/barbershops/{id}', [AdminBarbershopController::class, 'destroy']);
+
+    // User management
+    Route::get('/users/stats', [AdminUserController::class, 'stats']);
+    Route::get('/users', [AdminUserController::class, 'index']);
+    Route::put('/users/{id}', [AdminUserController::class, 'update']);
+    Route::delete('/users/{id}', [AdminUserController::class, 'destroy']);
+
+    // Login Log management
+    Route::get('/login-logs/stats', [AdminLoginLogController::class, 'stats']);
+    Route::get('/login-logs', [AdminLoginLogController::class, 'index']);
+
+    // Subscription plan management
+    Route::get('/subscription-plans', [AdminSubscriptionPlanController::class, 'index']);
+    Route::put('/subscription-plans/{plan}', [AdminSubscriptionPlanController::class, 'update']);
+
+    // Transaction management
+    Route::get('/transactions/stats', [AdminTransactionController::class, 'stats']);
+    Route::get('/transactions', [AdminTransactionController::class, 'index']);
+    Route::post('/transactions/sync-pending', [AdminTransactionController::class, 'syncPending']); // ← tambahkan ini
+    Route::post('/transactions/{subscription}/refund', [AdminTransactionController::class, 'processRefund']);
+    Route::post('/transactions/{subscription}/reject-refund', [AdminTransactionController::class, 'rejectDirectRefund']);
+
+    // Refund requests
+    Route::get('/refund-requests', [AdminTransactionController::class, 'getRefundRequests']);
+    Route::patch('/refund-requests/{refundRequest}/approve', [AdminTransactionController::class, 'approveRefund']);
+    Route::patch('/refund-requests/{refundRequest}/reject', [AdminTransactionController::class, 'rejectRefund']);
+
+    // App Settings
+    Route::get('/app-settings', [AppSettingController::class, 'index']);
+    Route::patch('/app-settings', [AppSettingController::class, 'update']);
+    Route::post('/app-settings/logo', [AppSettingController::class, 'logo']);
+
 });
 
 // Customer
@@ -155,12 +290,51 @@ Route::prefix('customer')->group(function () {
         // Bookings cancel
         Route::patch('/bookings/{booking}/cancel', [CustomerBookingController::class, 'cancel']);
 
+        // Bookings activate
+        Route::post('/bookings/{booking}/activate', [CustomerBookingController::class, 'activate']);
+
         // Available time slots (STEP SLOT SYSTEM)
         Route::get('/available-slots', [CustomerBookingController::class, 'availableSlots']);
 
         // My booking lists
         Route::get('/bookings', [CustomerListBookingController::class, 'index']);
+
+        // Ratings
+        Route::post('/bookings/{booking}/rate', [CustomerBookingController::class, 'rate']);
     });
 
 });
+
+// Barber
+Route::prefix('barber')->middleware(['auth:sanctum', 'verified.api', 'token.expired', 'role:barber'])->group(function () {
+    
+    // Dashboard
+    Route::get('/dashboard', [DashboardController::class, 'index']);
+
+    // My Workplace
+    Route::get('/barbershop', [BarberWorkPlaceController::class, 'show']);
+
+    // My Schedule
+    Route::get('/attendance/today',    [BarberAttendanceController::class, 'today']);
+    Route::post('/attendance/checkin', [BarberAttendanceController::class, 'checkin']);
+    Route::post('/attendance/checkout', [BarberAttendanceController::class, 'checkout']); 
+    Route::get('/schedule/weekly', [BarberAttendanceController::class, 'weeklySchedule']);
+
+    // Booking queue
+    Route::get('/bookings/today',            [BarberBookingController::class, 'today']);
+    Route::patch('/bookings/{booking}/done', [BarberBookingController::class, 'done']);
+    Route::get('/bookings/history',          [BarberBookingController::class, 'history']);
+
+});
+
+
+// Public routes
+// Midtrans callback (public — no auth required)
+Route::post('/subscription/callback', [OwnerSubscriptionController::class, 'callback']);
+
+// Midtrans callback for bookings
+Route::post('/booking/callback', [CustomerBookingController::class, 'callback']);
+
+// List subscription plans (for pricing page)
+Route::get('/plans', [AdminSubscriptionPlanController::class, 'index']);
 
