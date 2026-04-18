@@ -43,7 +43,7 @@ const NAV_LINKS_AUTH = [
 ];
 
 const PROFILE_MENU_ITEMS = [
-  { label: "Bookings",    href: "/customer/booking",     icon: Calendar      },
+  { label: "Bookings",    href: "/booking",               icon: Calendar },
   { label: "My Booking",  href: "/customer/my-bookings", icon: CalendarCheck },
 ];
 

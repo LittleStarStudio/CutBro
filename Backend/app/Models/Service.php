@@ -37,4 +37,9 @@ class Service extends Model
         return $this->hasMany(Promo::class);
     }
 
+    public function activePromo()
+    {
+        return $this->hasOne(Promo::class)->where('is_active', true)->latest();
+    }
+
 }

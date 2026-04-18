@@ -4,18 +4,7 @@ import { Loader2, AlertCircle, RefreshCw, Shield, Lock } from "lucide-react";
 import Button from "@/components/ui/Button";
 import { checkoutPlan, activatePlan } from "@/services/owner.service";
 
-declare global {
-  interface Window {
-    snap: {
-      embed: (token: string, options: {
-        embedId: string;
-        onSuccess?: (result: unknown) => void;
-        onError?: (result: unknown) => void;
-        onClose?: () => void;
-      }) => void;
-    };
-  }
-}
+/* ── Midtrans Snap type declared in src/type/midtrans.d.ts ── */
 
 function formatPrice(price: number): string {
   if (price === 0) return "Free";
@@ -81,6 +70,13 @@ export default function SubscriptionPayment() {
         if (container) container.innerHTML = "";
 
         setStatus("ready");
+
+        if (!window.snap) {
+          setErrorMsg("Payment gateway failed to load. Please refresh.");
+          setStatus("error");
+          return;
+        }
+
         window.snap.embed(res.snap_token!, {
           embedId: "snap-container",
           onSuccess: async () => {

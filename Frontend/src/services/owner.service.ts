@@ -125,8 +125,6 @@ export interface Transaction {
   platform_fee: number;
   net_amount: number;
   display_status: string;
-  refund_request_id: number | null;
-  refund_reason: string | null;
 }
 
 export interface RefundRow {

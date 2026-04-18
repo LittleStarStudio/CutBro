@@ -13,6 +13,7 @@ import PricingSection from "./pages/PricingSection";
 import ForgotPassword from "@/pages/ForgotPassword";
 import ResetPassword from "./pages/ResetPassword";
 import VerifyEmail from "@/pages/VerifyEmail";
+import GoogleCallback from "@/pages/GoogleCallback";
 
 import AdminDashboard from "@/pages/admin/AdminDashboard";
 import AdminBarbershops from "./pages/admin/Barbershops";
@@ -81,6 +82,7 @@ function AnimatedRoutes() {
         <Route path="/forgot-password" element={<ForgotPassword />} />
         <Route path="/reset-password" element={<ResetPassword />} />
         <Route path="/verify-email" element={<VerifyEmail />} />
+        <Route path="/auth/google/callback" element={<GoogleCallback />} />
         <Route path="/billing" element={<ProtectedRoute allow={["owner"]}><Billing /></ProtectedRoute>} />
         <Route path="/subscription/pay" element={<ProtectedRoute allow={["owner"]}><SubscriptionPayment /></ProtectedRoute>} />
 
@@ -127,7 +129,8 @@ function AnimatedRoutes() {
         {/* ===== CUSTOMER ===== */}
         <Route path="/customer" element={<ProtectedRoute allow={["customer"]}><CustomerDashboard /></ProtectedRoute>} />
         <Route path="/customer/booking/:id" element={<ProtectedRoute allow={["customer"]}><BookingDetail /></ProtectedRoute>} />
-        <Route path="/customer/booking" element={<ProtectedRoute allow={["customer"]}><CustomerBookings /></ProtectedRoute>} />
+        <Route path="/booking" element={<CustomerBookings />} />
+        <Route path="/customer/booking" element={<Navigate to="/booking" replace />} />
         <Route path="/customer/my-bookings" element={<ProtectedRoute allow={["customer"]}><MyBookings /></ProtectedRoute>} />
         <Route path="/customer/payment" element={<ProtectedRoute allow={["customer"]}><PaymentPage /></ProtectedRoute>} />
 

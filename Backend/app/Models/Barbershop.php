@@ -6,6 +6,8 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
+use App\Models\BarbershopRating;
+
 class Barbershop extends Model
 {
     use SoftDeletes, HasFactory;
@@ -69,6 +71,17 @@ class Barbershop extends Model
     public function photos()
     {
         return $this->hasMany(BarbershopPhoto::class)->orderBy('order');
+    }
+
+    public function getLogoUrlAttribute($value): ?string
+    {
+        if (!$value) return null;
+        return \Illuminate\Support\Facades\Storage::disk('public')->url($value);
+    }
+
+    public function ratings()
+    {
+        return $this->hasMany(BarbershopRating::class);
     }
 
 }

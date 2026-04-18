@@ -33,11 +33,15 @@ use App\Http\Controllers\Api\Admin\SubscriptionPlanController as AdminSubscripti
 use App\Http\Controllers\Api\Admin\TransactionController as AdminTransactionController;
 use App\Http\Controllers\Api\Admin\AppSettingController;
 
+use App\Http\Controllers\Api\Barber\DashboardController;
 use App\Http\Controllers\Api\Barber\AttendanceController as BarberAttendanceController;
 use App\Http\Controllers\Api\Barber\BarbershopController as BarberWorkPlaceController;
+use App\Http\Controllers\Api\Barber\BookingController as BarberBookingController;
 
 use App\Http\Controllers\Api\Customer\BookingController as CustomerBookingController;
 use App\Http\Controllers\Api\Customer\ListBookingController as CustomerListBookingController;
+
+use App\Http\Controllers\Api\Public\BarbershopPublicController;
 
 use App\Models\User;
 use Illuminate\Http\Request;
@@ -132,10 +136,13 @@ Route::prefix('auth')->group(function () {
 });
 
 // Barbershop
+// Public: Browse barbershops
 Route::prefix('barbershops')->group(function () {
-    Route::get('/', [BarbershopController::class, 'index']);
-    Route::get('/{slug}', [BarbershopController::class, 'show']);
+    Route::get('/', [BarbershopPublicController::class, 'index']);
+    Route::get('/{id}', [BarbershopPublicController::class, 'show']);
+    Route::get('/{id}/available-slots', [BarbershopPublicController::class, 'availableSlots']);
 });
+
 
 // Notifications (all authenticated roles)
 Route::prefix('notifications')->middleware(['auth:sanctum', 'verified.api', 'token.expired'])->group(function () {
@@ -283,11 +290,17 @@ Route::prefix('customer')->group(function () {
         // Bookings cancel
         Route::patch('/bookings/{booking}/cancel', [CustomerBookingController::class, 'cancel']);
 
+        // Bookings activate
+        Route::post('/bookings/{booking}/activate', [CustomerBookingController::class, 'activate']);
+
         // Available time slots (STEP SLOT SYSTEM)
         Route::get('/available-slots', [CustomerBookingController::class, 'availableSlots']);
 
         // My booking lists
         Route::get('/bookings', [CustomerListBookingController::class, 'index']);
+
+        // Ratings
+        Route::post('/bookings/{booking}/rate', [CustomerBookingController::class, 'rate']);
     });
 
 });
@@ -295,6 +308,9 @@ Route::prefix('customer')->group(function () {
 // Barber
 Route::prefix('barber')->middleware(['auth:sanctum', 'verified.api', 'token.expired', 'role:barber'])->group(function () {
     
+    // Dashboard
+    Route::get('/dashboard', [DashboardController::class, 'index']);
+
     // My Workplace
     Route::get('/barbershop', [BarberWorkPlaceController::class, 'show']);
 
@@ -303,12 +319,21 @@ Route::prefix('barber')->middleware(['auth:sanctum', 'verified.api', 'token.expi
     Route::post('/attendance/checkin', [BarberAttendanceController::class, 'checkin']);
     Route::post('/attendance/checkout', [BarberAttendanceController::class, 'checkout']); 
     Route::get('/schedule/weekly', [BarberAttendanceController::class, 'weeklySchedule']);
+
+    // Booking queue
+    Route::get('/bookings/today',            [BarberBookingController::class, 'today']);
+    Route::patch('/bookings/{booking}/done', [BarberBookingController::class, 'done']);
+    Route::get('/bookings/history',          [BarberBookingController::class, 'history']);
+
 });
 
 
 // Public routes
 // Midtrans callback (public — no auth required)
 Route::post('/subscription/callback', [OwnerSubscriptionController::class, 'callback']);
+
+// Midtrans callback for bookings
+Route::post('/booking/callback', [CustomerBookingController::class, 'callback']);
 
 // List subscription plans (for pricing page)
 Route::get('/plans', [AdminSubscriptionPlanController::class, 'index']);

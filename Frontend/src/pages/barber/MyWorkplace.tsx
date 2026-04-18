@@ -134,7 +134,7 @@ export default function BarberWorkplace() {
           <div className="p-6 flex flex-col sm:flex-row sm:items-center gap-5">
             {barbershop?.logo_url ? (
               <img 
-                src={`http://localhost:8000/storage/${barbershop.logo_url}`}
+                src={barbershop.logo_url}
                 alt="Logo" 
                 className="w-16 h-16 rounded-2xl object-cover border-2 border-[#D4AF37]/30 flex-shrink-0"
                 onError={(e) => {

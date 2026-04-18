@@ -228,8 +228,12 @@ export default function Register() {
       onBack={backToRoleSelect}
     >
       <div className="space-y-6">
-        <GoogleButton onClick={handleGoogleRegister} />
-        <Divider />
+        {selectedRole === "customer" && (
+          <>
+            <GoogleButton onClick={handleGoogleRegister} />
+            <Divider />
+          </>
+        )}
 
         <form onSubmit={handleSubmit} className="space-y-4" noValidate>
 

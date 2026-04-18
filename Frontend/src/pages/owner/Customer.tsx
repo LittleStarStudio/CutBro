@@ -171,8 +171,8 @@ export default function OwnerCustomers() {
     {
       key: "actions",
       header: "Actions",
-      headerClassName: "text-right",
-      className: "text-right",
+      headerClassName: "text-center",
+      className: "text-center",
       render: (customer: Customer) => (
         <ActionButtons actions={[
           { type: "edit", onClick: () => handleEditClick(customer) },
@@ -217,17 +217,23 @@ export default function OwnerCustomers() {
                   title={customer.name}
                   subtitle={<p className="text-xs text-[#B8B8B8]">{customer.email}</p>}
                   headerRight={
-                    <div>
+                    <div className="flex flex-col items-end gap-1">
                       <Badge text={capitalizeFirst(customer.status)} variant={STATUS_STYLES[customer.status]} showDot dotColor={STATUS_DOT_COLORS[customer.status]} />
-                      {customer.status === "banned" && customer.bannedReason && <p className="text-xs text-red-400 mt-1">{customer.bannedReason}</p>}
+                      {customer.status === "banned" && customer.bannedReason && (
+                        <p className="text-xs text-red-400 text-right max-w-[120px] truncate">{customer.bannedReason}</p>
+                      )}
                     </div>
                   }
                   fields={[
-                    { label: "Total Bookings", value: customer.totalBookings  },
-                    { label: "Last Visit",     value: customer.lastVisit      },
-                    { label: "Total Spent",    value: customer.totalSpent     },
+                    { label: "Total Bookings", value: customer.totalBookings },
+                    { label: "Last Visit",     value: customer.lastVisit     },
+                    { label: "Total Spent",    value: customer.totalSpent    },
                   ]}
-                  actions={<ActionButtons actions={[{ type: "edit", onClick: () => handleEditClick(customer) }]} />}
+                  actions={
+                    <div className="flex justify-end">
+                      <ActionButtons actions={[{ type: "edit", onClick: () => handleEditClick(customer) }]} />
+                    </div>
+                  }
                 />
               )}
             />

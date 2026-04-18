@@ -8,6 +8,7 @@ use Illuminate\Support\Carbon;
 use DateTimeInterface;
 
 use App\Models\RefundRequest;
+use App\Models\BarbershopRating;
 
 class Booking extends Model
 {
@@ -74,6 +75,11 @@ class Booking extends Model
     public function refundRequest()
     {
         return $this->hasOne(RefundRequest::class, 'booking_id');
+    }
+
+    public function rating()
+    {
+        return $this->hasOne(BarbershopRating::class);
     }
 
 }

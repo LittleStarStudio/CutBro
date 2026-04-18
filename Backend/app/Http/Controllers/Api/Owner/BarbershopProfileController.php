@@ -88,14 +88,14 @@ class BarbershopProfileController extends BaseController
 
         // Handle photo upload
         if ($request->hasFile('photo')) {
-            if ($barbershop->logo_url) {
-                Storage::disk('public')->delete($barbershop->logo_url);
+            if ($barbershop->getRawOriginal('logo_url')) {
+                Storage::disk('public')->delete($barbershop->getRawOriginal('logo_url'));
             }
             $path = $request->file('photo')->store('barbershops', 'public');
             $barbershop->logo_url = $path;
         } elseif ($request->input('remove_photo') === '1') {
-            if ($barbershop->logo_url) {
-                Storage::disk('public')->delete($barbershop->logo_url);
+            if ($barbershop->getRawOriginal('logo_url')) {
+                Storage::disk('public')->delete($barbershop->getRawOriginal('logo_url'));
             }
             $barbershop->logo_url = null;
         }

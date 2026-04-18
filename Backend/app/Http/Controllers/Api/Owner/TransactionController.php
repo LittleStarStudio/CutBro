@@ -12,23 +12,13 @@ class TransactionController extends Controller
     {
         $barbershopId = $request->user()->barbershop_id;
 
-        $bookings = Booking::with(['customer', 'service', 'barber.user', 'payment', 'refundRequest'])
+        $bookings = Booking::with(['customer', 'service', 'barber.user', 'payment'])
             ->where('barbershop_id', $barbershopId)
             ->whereIn('status', ['paid', 'done', 'cancelled', 'no_show'])
             ->orderBy('booking_date', 'desc')
             ->get()
             ->map(function ($b) {
-                $refund = $b->refundRequest;
                 $gross  = (float) $b->total_price;
-
-                $displayStatus = match (true) {
-                    $b->status === 'cancelled' && $refund?->status === 'owner_pending'  => 'refund_requested',
-                    $b->status === 'cancelled' && $refund?->status === 'owner_rejected' => 'refund_rejected',
-                    $b->status === 'cancelled' && $refund?->status === 'pending'        => 'forwarded',
-                    $b->status === 'cancelled' && $refund?->status === 'approved'       => 'refunded',
-                    $b->status === 'cancelled' && $refund?->status === 'rejected'       => 'refund_rejected',
-                    default => $b->status,
-                };
 
                 return [
                     'id'                => $b->id,
@@ -42,9 +32,7 @@ class TransactionController extends Controller
                     'gross_amount'      => $gross,
                     'platform_fee'      => round($gross * 0.02, 2),
                     'net_amount'        => round($gross * 0.98, 2),
-                    'display_status'    => $displayStatus,
-                    'refund_request_id' => $refund?->id,
-                    'refund_reason'     => $refund?->reason,
+                    'display_status'    => $b->status,
                 ];
             });
 

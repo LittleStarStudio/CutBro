@@ -4,6 +4,8 @@ import { Mail, AlertCircle, X, MailCheck } from "lucide-react";
 import axios from "axios";
 
 import Button from "@/components/ui/Button";
+import GoogleButton from "@/components/auth/GoogleButton";
+import Divider from "@/components/auth/Divider";
 import AuthLayout from "@/components/auth/AuthLayout";
 import FormInput from "@/components/auth/FormInput";
 import PasswordInput from "@/components/auth/PasswordInput";
@@ -56,10 +58,17 @@ export default function Login() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
+  const handleGoogleLogin = () => {
+    window.location.href = `${import.meta.env.VITE_API_BASE_URL}/auth/google/redirect`;
+  };
   const [error, setError] = useState<string | null>(null);
   const [info, setInfo] = useState<string | null>(
     searchParams.get("registered") === "true"
       ? "Registration successful! Please check your email and verify your account before logging in."
+      : searchParams.get("error") === "google_failed"
+      ? "Google login failed. Please try again or use email & password."
+      : searchParams.get("error")?.startsWith("account_")
+      ? "Your account is not active. Please contact support."
       : null
   );
 
@@ -122,6 +131,10 @@ export default function Login() {
 
   return (
     <AuthLayout title="Sign In" subtitle="" selectedRole={null} onBack={() => {}}>
+
+      <GoogleButton onClick={handleGoogleLogin} text="Continue with Google" />
+      <Divider />
+      
       <form onSubmit={onSubmit} className="space-y-6" noValidate>
 
         {/* Info Banner — verifikasi email setelah register */}

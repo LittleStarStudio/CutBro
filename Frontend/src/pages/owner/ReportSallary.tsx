@@ -41,12 +41,12 @@ export default function SalesReport() {
     ownerService.getTransactions().then((data) => {
       setTransactions(data.map((t) => ({
         id:            t.id,
-        invoiceNumber: t.invoice_number,
+        invoiceNumber: t.order_id,
         customerName:  t.customer_name,
         service:       t.service_name,
         barberName:    t.barber_name,
-        price:         t.price,
-        date:          t.date,
+        price:         t.gross_amount,     
+        date:          t.booking_date,     
       })));
     }).catch(() => {});
   }, []);

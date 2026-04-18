@@ -10,6 +10,7 @@ use App\Models\OperationalHour;
 use App\Models\BarberShiftAssignment;
 use App\Models\Shift;
 use Carbon\Carbon;
+use App\Models\Notification;
 use Illuminate\Support\Facades\Auth;
 
 class BookingService
@@ -184,8 +185,10 @@ class BookingService
         if ($customerConflict) {
             abort(400, 'You already have booking at this time');
         }
+        
+        $service->load('activePromo');
 
-        return Booking::create([
+        $booking = Booking::create([
             'barbershop_id' => $service->barbershop_id,
             'customer_id'   => $customer->id,
             'barber_id'     => $barber->id,
@@ -193,9 +196,21 @@ class BookingService
             'booking_date'  => $bookingDate->format('Y-m-d'),
             'start_time'    => $start->format('H:i:s'),
             'end_time'      => $end->format('H:i:s'),
-            'total_price'   => $service->price,
+            'total_price'   => $service->activePromo ? $service->activePromo->final_price : $service->price,
             'status'        => Booking::STATUS_PENDING_PAYMENT
         ]);
+
+        // Notifikasi ke barber
+        Notification::create([
+            'user_id' => $barber->user_id,
+            'type'    => 'new_booking',
+            'title'   => 'New Booking',
+            'body'    => "New booking from {$customer->name} for {$service->name} on {$bookingDate->format('d M Y')} at {$start->format('H:i')}.",
+            'data'    => ['booking_id' => $booking->id],
+        ]);
+
+        return $booking;
+
     }
 
     public function updateStatus(Booking $booking, string $newStatus)
@@ -401,29 +416,23 @@ class BookingService
     {
         $customer = Auth::user();
 
-        $query = Booking::with(['service', 'barber', 'customer'])
+        $query = Booking::with(['service', 'barbershop', 'barber.user', 'payment', 'rating'])
             ->where('customer_id', $customer->id);
 
-        $now = Carbon::now('Asia/Jakarta');
-
         if ($filter === 'upcoming') {
-            $query->where(function ($q) use ($now) {
-                $q->whereDate('booking_date', '>', $now->toDateString())
-                ->orWhere(function ($qq) use ($now) {
-                    $qq->whereDate('booking_date', $now->toDateString())
-                        ->where('start_time', '>=', $now->format('H:i:s'));
-                });
-            });
+            $query->whereIn('status', [
+                Booking::STATUS_PENDING_PAYMENT,
+                Booking::STATUS_PAID,
+            ]);
         }
 
         if ($filter === 'history') {
-            $query->where(function ($q) use ($now) {
-                $q->whereDate('booking_date', '<', $now->toDateString())
-                ->orWhere(function ($qq) use ($now) {
-                    $qq->whereDate('booking_date', $now->toDateString())
-                        ->where('start_time', '<', $now->format('H:i:s'));
-                });
-            });
+            $query->whereIn('status', [
+                Booking::STATUS_DONE,
+                Booking::STATUS_CANCELLED,
+                Booking::STATUS_NO_SHOW,
+                Booking::STATUS_EXPIRED,  
+            ]);
         }
 
         return $query

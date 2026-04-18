@@ -16,7 +16,7 @@ class DashboardController extends Controller
 
         $totalBooking   = Booking::where('barbershop_id', $barbershopId)->count();
         $totalCustomer  = Booking::where('barbershop_id', $barbershopId)
-            ->distinct('user_id')->count('user_id');
+            ->distinct('customer_id')->count('customer_id');
         $totalBarber    = Barber::where('barbershop_id', $barbershopId)->count();
         $totalBalance   = Booking::where('barbershop_id', $barbershopId)
             ->whereIn('status', ['paid', 'done'])
@@ -25,10 +25,10 @@ class DashboardController extends Controller
         // Monthly salary data: sum of paid bookings grouped by month (current year)
         $year = now()->year;
         $monthly = Booking::where('barbershop_id', $barbershopId)
-            ->where('payment_status', 'paid')
-            ->whereYear('created_at', $year)
+            ->whereIn('status', ['paid', 'done'])
+            ->whereYear('booking_date', $year)
             ->select(
-                DB::raw('MONTH(created_at) as month_num'),
+                DB::raw('MONTH(booking_date) as month_num'),
                 DB::raw('SUM(total_price) as amount')
             )
             ->groupBy('month_num')

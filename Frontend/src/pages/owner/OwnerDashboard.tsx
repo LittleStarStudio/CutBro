@@ -18,6 +18,7 @@ import {
 } from "recharts";
 import DashboardLayout from "@/components/dashboard/DashboardLayout";
 import { getDashboard, getMySubscription, type DashboardData, type ActiveSubscription } from "@/services/owner.service";
+import { getUnreadCount } from "@/services/notification.service";
 
 /* ================= HELPERS ================= */
 
@@ -44,6 +45,7 @@ export default function OwnerDashboard() {
   const [isLoading, setIsLoading] = useState(true);
 
   const [subscription, setSubscription] = useState<ActiveSubscription | null>(null);
+  const [unreadCount, setUnreadCount] = useState(0);
 
   useEffect(() => {
     getDashboard()
@@ -58,6 +60,11 @@ export default function OwnerDashboard() {
       .catch(() => {});
   }, []);
 
+  useEffect(() => {
+    getUnreadCount()
+      .then(r => setUnreadCount(r.data.data.count))
+      .catch(() => {});
+  }, []);
 
   const stats = useMemo(() => {
     if (!data) return null;
@@ -88,7 +95,7 @@ export default function OwnerDashboard() {
       logo={ownerLogo}
       userProfile={user ?? { name: "owner", email: "owner@cutbro.com", role: "owner" }}
       showNotification
-      notificationCount={3}
+      notificationCount={unreadCount}
       onLogout={logout}
     >
       <div className="space-y-6 lg:space-y-8">

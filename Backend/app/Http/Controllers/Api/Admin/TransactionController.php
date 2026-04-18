@@ -37,7 +37,7 @@ class TransactionController extends BaseController
         return $this->success([
             'total_transactions' => $totalSubs,
             'subscription_count' => $totalSubs,
-            'booking_count'      => 0,
+            'booking_count'      => Booking::whereIn('status', ['paid', 'done'])->count(),
             'success_rate'       => $totalSubs > 0 ? round($successSubs / $totalSubs * 100, 1) : 0,
             'total_revenue'      => (float) $totalRevenue,
             'available_balance'  => (float) ($totalRevenue - $refunded),

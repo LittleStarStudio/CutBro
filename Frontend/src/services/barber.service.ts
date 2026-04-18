@@ -51,6 +51,48 @@ export interface WeeklySchedule {
   } | null;
 }
 
+export interface TodayBookingStats {
+  total: number;
+  done: number;
+  pending: number;
+}
+
+export interface TodayBooking {
+  id: number;
+  start_time: string;
+  end_time: string;
+  customer_name: string;
+  service_name: string;
+  status: string;
+  total_price: number;
+}
+
+export interface BarberHistoryBooking {
+  id: number;
+  booking_date: string;
+  start_time: string;
+  customer_name: string;
+  service_name: string;
+  status: string;
+  total_price: number;
+}
+
+export interface BarberDashboardData {
+  workplace:   string;
+  total_done:  number;
+  this_month:  number;
+  monthly_avg: number;
+  chart: { month: string; customers: number }[];
+  recent: {
+    customer_name: string;
+    service_name:  string;
+    start_time:    string;
+    end_time:      string;
+    booking_date:  string;
+    status:        string;
+  }[];
+}
+
 function unwrap<T>(res: { data: { success: boolean; data: T } }): T {
   return res.data.data;
 }
@@ -72,3 +114,17 @@ export const checkOut = () =>
 export const getWeeklySchedule = () =>
   api.get<{ success: boolean; data: WeeklySchedule }>("/barber/schedule/weekly")
      .then(unwrap<WeeklySchedule>);
+
+export const getTodayBookings = (): Promise<{
+  stats: TodayBookingStats;
+  bookings: TodayBooking[];
+}> => api.get("/barber/bookings/today").then((r) => r.data.data);
+
+export const markBookingDone = (id: number) =>
+  api.patch(`/barber/bookings/${id}/done`).then((r) => r.data);
+
+export const getBarberBookingHistory = (): Promise<BarberHistoryBooking[]> =>
+  api.get("/barber/bookings/history").then((r) => r.data.data);
+
+export const getBarberDashboard = (): Promise<BarberDashboardData> =>
+  api.get("/barber/dashboard").then((r) => r.data.data);

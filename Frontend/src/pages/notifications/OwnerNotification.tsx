@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   CheckCheck, Bell, AlertTriangle, CheckCircle,
-  XCircle, Loader2,
+  XCircle, Loader2, Star
 } from "lucide-react";
 import { useToast } from "@/components/ui/Toast";
 import DashboardLayout from "@/components/dashboard/DashboardLayout";
@@ -66,6 +66,14 @@ const CATEGORY_CONFIG: Record<string, {
     bg: "bg-red-500/10",
     border: "border-red-500/20",
     dot: "bg-red-400",
+  },
+  new_rating: {
+    icon: Star,
+    label: "New Rating",
+    color: "text-amber-400",
+    bg: "bg-amber-500/10",
+    border: "border-amber-500/20",
+    dot: "bg-amber-400",
   },
   default: {
     icon: Bell,
@@ -201,6 +209,22 @@ export default function OwnerNotification() {
             ) : undefined
           }
         />
+
+        {/* Summary Cards */}
+        {!loading && (
+          <div className="grid grid-cols-2 gap-4">
+            <div className="bg-[#141414] border border-white/10 rounded-2xl p-4 flex flex-col gap-1">
+              <span className="text-xs text-[#666] font-medium">Total</span>
+              <span className="text-2xl font-bold text-white">{total}</span>
+              <span className="text-xs text-[#B8B8B8]">notifications</span>
+            </div>
+            <div className="bg-[#141414] border border-amber-500/20 rounded-2xl p-4 flex flex-col gap-1">
+              <span className="text-xs text-[#666] font-medium">Unread</span>
+              <span className="text-2xl font-bold text-amber-400">{unread}</span>
+              <span className="text-xs text-[#B8B8B8]">pending</span>
+            </div>
+          </div>
+        )}
 
         {loading ? (
           <div className="flex justify-center py-20">

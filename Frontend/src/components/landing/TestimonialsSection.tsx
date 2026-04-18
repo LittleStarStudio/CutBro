@@ -10,7 +10,7 @@ const testimonials = [
     type: "owner",
     image: owner1,
     content:
-      "BarberBook transformed my business completely. Bookings increased by 60% and customer satisfaction is at an all-time high!",
+      "CutBro transformed my business completely. Bookings increased by 60% and customer satisfaction is at an all-time high!",
     rating: 5,
     location: "New York, USA",
   },
@@ -57,7 +57,7 @@ export function TestimonialsSection() {
             </span>
           </h2>
           <p className="text-lg text-zinc-400 leading-relaxed">
-            Hear success stories from owners, barbers, and customers who love BarberBook.
+            Hear success stories from owners, barbers, and customers who love CutBro.
           </p>
         </div>
 

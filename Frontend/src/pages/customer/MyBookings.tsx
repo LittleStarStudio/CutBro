@@ -1,435 +1,431 @@
-/* ================================================================
-   src/pages/customer/MyBookings.tsx
-================================================================ */
-
-import { useState, useMemo, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
+import { useNavigate } from "react-router-dom";
 import {
-  Search, Calendar, Clock, MapPin, Star,
-  Filter, X, CreditCard, Phone,
+  Calendar, Clock, Scissors, Loader2, AlertCircle,
+  CreditCard, X, CheckCircle, Ban, Star, Search
 } from "lucide-react";
-import { motion, type Variants, AnimatePresence } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
 
 import NavbarLayout   from "@/components/layout/Navbar";
 import BottomNav      from "@/components/layout/BottomNav";
 import PageTransition from "@/components/layout/PageTransition";
-import Pagination     from "@/components/ui/Pagination";
-import CancelModal    from "@/components/booking/CancelModal";
 
-import { customerMenu }      from "@/components/config/Menu";
-import { useAuth }           from "@/components/context/AuthContext";
-import { useDebouncedValue } from "@/hooks/useDebouncedValue";
-import { useToast }          from "@/components/ui/Toast";
-import { useNavigate, useLocation } from "react-router-dom";
-import type { Booking, BookingStatus } from "@/type/BookingType";
-import { PAYMENT_STATUS_CONFIG }       from "@/type/BookingType";
+import { customerMenu } from "@/components/config/Menu";
+import { useAuth }      from "@/components/context/AuthContext";
+import { useToast }     from "@/components/ui/Toast";
+import {
+  getMyBookings,
+  cancelMyBooking,
+  activateBooking,  
+  rateBooking,
+  type CustomerBooking,
+} from "@/services/customer.service";
 
-/* ── Config ── */
-const ITEMS_PER_PAGE = 5;
-
-/* ── Mock data ── */
-const INITIAL_BOOKINGS: Booking[] = [
-  {
-    id: 1,
-    shopName: "Royal Cuts",
-    location: "South Jakarta",
-    date: "2026-02-18",
-    time: "14:00",
-    service: "Haircut + Beard",
-    price: "Rp 550.000",
-    phone: "+62 812-3456-7890",
-    image: "https://images.unsplash.com/photo-1621605815971-fbc98d665033?w=800",
-    status: "upcoming",
-    paymentStatus: "PENDING_PAYMENT",
-  },
-  {
-    id: 2,
-    shopName: "Modern Barber",
-    location: "Central Jakarta",
-    date: "2026-02-10",
-    time: "10:30",
-    service: "Premium Cut",
-    price: "Rp 700.000",
-    phone: "+62 821-9876-5432",
-    rating: 5,
-    image: "https://images.unsplash.com/photo-1517836357463-d25dfeac3438?w=800",
-    status: "upcoming",
-    paymentStatus: "WAITING_VERIFICATION",
-  },
-  {
-    id: 3,
-    shopName: "Classic Style",
-    location: "West Jakarta",
-    date: "2026-02-05",
-    time: "09:00",
-    service: "Hair Treatment",
-    price: "Rp 475.000",
-    phone: "+62 813-1122-3344",
-    image: "https://images.unsplash.com/photo-1599351431202-1e0f0137899a?w=800",
-    status: "upcoming",
-    paymentStatus: "PAID",
-  },
-  {
-    id: 4,
-    shopName: "Gentleman's Club",
-    location: "North Jakarta",
-    date: "2026-01-28",
-    time: "13:00",
-    service: "Full Grooming",
-    price: "Rp 850.000",
-    phone: "+62 857-5566-7788",
-    rating: 5,
-    image: "https://images.unsplash.com/photo-1585747860715-2ba37e788b70?w=800",
-    status: "completed",
-    paymentStatus: "DONE",
-  },
-  {
-    id: 5,
-    shopName: "Urban Cuts",
-    location: "East Jakarta",
-    date: "2026-01-20",
-    time: "11:00",
-    service: "Haircut",
-    price: "Rp 350.000",
-    phone: "+62 878-9900-1122",
-    image: "https://images.unsplash.com/photo-1503951914875-452162b0f3f1?w=800",
-    status: "cancelled",
-    paymentStatus: "CANCELLED",
-  },
-  {
-    id: 6,
-    shopName: "Royal Cuts",
-    location: "South Jakarta",
-    date: "2026-01-15",
-    time: "15:00",
-    service: "Beard Trim",
-    price: "Rp 200.000",
-    phone: "+62 811-2233-4455",
-    image: "https://images.unsplash.com/photo-1621605815971-fbc98d665033?w=800",
-    status: "upcoming",
-    paymentStatus: "REFUND_REQUESTED",
-  },
-  {
-    id: 7,
-    shopName: "Modern Barber",
-    location: "Central Jakarta",
-    date: "2026-01-10",
-    time: "10:00",
-    service: "Premium Cut",
-    price: "Rp 700.000",
-    phone: "+62 831-6677-8899",
-    image: "https://images.unsplash.com/photo-1517836357463-d25dfeac3438?w=800",
-    status: "cancelled",
-    paymentStatus: "REFUNDED",
-  },
-];
-
-/* ── Status styles untuk kartu (upcoming/completed/cancelled) ── */
-const STATUS_STYLES: Record<BookingStatus, string> = {
-  completed: "text-green-300 border-green-400/50 bg-green-500/15",
-  cancelled:  "text-red-300 border-red-400/50 bg-red-500/15",
-  upcoming:   "text-amber-300 border-amber-400/50 bg-amber-500/15",
+/* ── Status badge config ── */
+const STATUS_CONFIG: Record<string, { label: string; color: string }> = {
+  pending_payment: { label: "Awaiting Payment",  color: "text-yellow-400 border-yellow-400/40 bg-yellow-400/10" },
+  paid:            { label: "Paid",     color: "text-blue-400 border-blue-400/40 bg-blue-400/10"   },
+  done:            { label: "Done",          color: "text-green-400 border-green-400/40 bg-green-400/10" },
+  cancelled:       { label: "Cancelled",       color: "text-red-400 border-red-400/40 bg-red-400/10"     },
+  no_show:         { label: "No Show",      color: "text-neutral-400 border-neutral-400/40 bg-neutral-400/10" },
+  expired:         { label: "Expired",      color: "text-neutral-400 border-neutral-400/40 bg-neutral-400/10" },
 };
 
-const CAN_PAY    = new Set(["PENDING_PAYMENT"]);
-const CAN_CANCEL = new Set(["PENDING_PAYMENT", "WAITING_VERIFICATION", "PAID"]);
+const formatPrice = (n: number) =>
+  "Rp " + new Intl.NumberFormat("id-ID", { maximumFractionDigits: 0 }).format(n);
 
-/* ── Animation variants ── */
-const listVariants: Variants = {
-  hidden: {},
-  show:   { transition: { staggerChildren: 0.08 } },
-};
+const formatDate  = (d: string) =>
+  new Date(d + "T00:00:00").toLocaleDateString("id-ID", {
+    weekday: "short", day: "numeric", month: "short", year: "numeric",
+  });
 
-const itemVariants: Variants = {
-  hidden: { opacity: 0, y: 20 },
-  show:   { opacity: 1, y: 0, transition: { duration: 0.4, ease: "easeOut" } },
-};
+/* ── Midtrans type declared in src/type/midtrans.d.ts ── */
 
-/* ================================================================
-   Component
-================================================================ */
 export default function MyBookings() {
   const { user, logout } = useAuth();
-  const toast            = useToast();
   const navigate         = useNavigate();
-  const location         = useLocation();
+  const toast            = useToast();
 
-  const [search,       setSearch]       = useState("");
-  const [filter,       setFilter]       = useState("all");
-  const [currentPage,  setCurrentPage]  = useState(1);
-  const [bookings,     setBookings]     = useState<Booking[]>(INITIAL_BOOKINGS);
-  const [cancelTarget, setCancelTarget] = useState<Booking | null>(null);
+  
+  const [tab,    setTab]    = useState<"upcoming" | "history">("upcoming");
+  const [search, setSearch] = useState("");  
+  const [bookings, setBookings] = useState<CustomerBooking[]>([]);
+  const [loading,  setLoading]  = useState(true);
+  const [error,    setError]    = useState("");
+  const [cancelling, setCancelling] = useState<number | null>(null);
+  const [cancelTarget, setCancelTarget] = useState<CustomerBooking | null>(null);
+  const [paying,     setPaying]     = useState<number | null>(null);
+  const [ratingModal, setRatingModal] = useState<CustomerBooking | null>(null);
+  const [starHover,   setStarHover]   = useState(0);
+  const [starValue,   setStarValue]   = useState(0);
+  const [reviewText,  setReviewText]  = useState("");
+  const [submitting,  setSubmitting]  = useState(false);
 
-  const debouncedSearch = useDebouncedValue(search, 300);
 
-  /* ── Terima update status dari Payment.tsx ── */
+  /* ── Load bookings ── */
+  const load = useCallback(async () => {
+    setLoading(true);
+    setError("");
+    try {
+      const data = await getMyBookings(tab);
+      setBookings(data);
+    } catch {
+      setError("Failed to load booking data.");
+    } finally {
+      setLoading(false);
+    }
+  }, [tab]);
+
+  useEffect(() => { load(); }, [load]);
+
+  /* ── Load Midtrans script ── */
   useEffect(() => {
-    const updated: Booking | undefined = location.state?.updatedBooking;
-    if (!updated) return;
-
-    setBookings((prev) =>
-      prev.map((b) => (b.id === updated.id ? { ...b, ...updated } : b))
-    );
-
-    // Bersihkan state agar tidak re-apply saat refresh
-    navigate(location.pathname, { replace: true, state: {} });
+    if (document.getElementById("midtrans-snap-script")) return;
+    const s = document.createElement("script");
+    s.id  = "midtrans-snap-script";
+    s.src = "https://app.sandbox.midtrans.com/snap/snap.js";
+    s.setAttribute("data-client-key", import.meta.env.VITE_MIDTRANS_CLIENT_KEY ?? "");
+    document.body.appendChild(s);
   }, []);
 
-  /* ── Filter + search ── */
-  const filtered = useMemo(() => {
-    return bookings.filter((b) => {
-      const matchSearch =
-        b.shopName.toLowerCase().includes(debouncedSearch.toLowerCase()) ||
-        b.service.toLowerCase().includes(debouncedSearch.toLowerCase());
-      const matchFilter = filter === "all" || b.status === filter;
-      return matchSearch && matchFilter;
-    });
-  }, [debouncedSearch, filter, bookings]);
-
-  /* ── Pagination ── */
-  const totalPages = Math.ceil(filtered.length / ITEMS_PER_PAGE);
-
-  const paginated = useMemo(() => {
-    const start = (currentPage - 1) * ITEMS_PER_PAGE;
-    return filtered.slice(start, start + ITEMS_PER_PAGE);
-  }, [filtered, currentPage]);
-
-  /* ── Handlers ── */
-  const handleSearchChange = (value: string) => {
-    setSearch(value);
-    setCurrentPage(1);
+  /* ── Cancel ── */
+  /* ── Cancel: buka modal konfirmasi dulu ── */
+  const handleCancel = (b: CustomerBooking) => {
+    setCancelTarget(b);
   };
 
-  const handleFilterChange = (value: string) => {
-    setFilter(value);
-    setCurrentPage(1);
-  };
-
-  const handlePageChange = (page: number) => {
-    setCurrentPage(page);
-    if (typeof window !== "undefined") {
-      window.scrollTo({ top: 0, behavior: "smooth" });
-    }
-  };
-
-  const handleCancelConfirm = () => {
+  const confirmCancel = async () => {
     if (!cancelTarget) return;
-    const { shopName, id, paymentStatus } = cancelTarget;
-
-    const needsRefund = paymentStatus === "PAID";
-
-    setBookings((prev) =>
-      prev.map((b) =>
-        b.id === id
-          ? {
-              ...b,
-              status:        needsRefund ? ("upcoming" as const)          : ("cancelled" as const),
-              paymentStatus: needsRefund ? ("REFUND_REQUESTED" as const)  : ("CANCELLED" as const),
-            }
-          : b
-      )
-    );
-
+    const target = cancelTarget;
     setCancelTarget(null);
-
-    if (needsRefund) {
-      toast.success(
-        "Refund Requested",
-        `Permintaan refund untuk ${shopName} telah dikirim. Mohon tunggu proses dari owner.`
-      );
-    } else {
-      toast.success(
-        "Booking Cancelled",
-        `Reservasi kamu di ${shopName} telah dibatalkan.`
-      );
+    setCancelling(target.id);
+    try {
+      await cancelMyBooking(target.id);
+      toast.success("Booking Cancelled", "Your reservation has been cancelled.");
+      load();
+    } catch (err: unknown) {
+      const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message
+        ?? "Failed to cancel booking.";
+      toast.error("Error", msg);
+    } finally {
+      setCancelling(null);
     }
   };
 
-  const handlePay = (booking: Booking) => {
-    navigate("/customer/payment", { state: { booking } });
+  /* ── Bayar ulang (jika masih pending_payment & ada snap_token) ── */
+  const handleRepay = (b: CustomerBooking) => {
+    const token = b.payment?.snap_token;
+    if (!token) { toast.error("Token not available", "Please create a new booking."); return; }
+    if (!window.snap) { toast.error("Payment system not ready", "Please refresh the page and try again."); return; }
+    setPaying(b.id);
+    window.snap.pay(token, {
+      onSuccess: async () => {
+        await activateBooking(b.id).catch(() => {});  
+        setPaying(null);
+        load();
+      },
+      onPending: () => { setPaying(null); load(); },
+      onError:   () => { setPaying(null); toast.error("Payment failed", "Please try again."); },
+      onClose:   () => { setPaying(null); },
+    });
   };
 
-  /* ================================================================
-     Render
-  ================================================================ */
+  const handleSubmitRating = async () => {
+    if (!ratingModal || starValue === 0) return;
+    setSubmitting(true);
+    try {
+      await rateBooking(ratingModal.id, { rating: starValue, review: reviewText || undefined });
+      toast.success("Rating Submitted", "Thank you for your feedback!");
+      setRatingModal(null);
+      setStarValue(0);
+      setReviewText("");
+      load();
+    } catch (err: unknown) {
+      const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message
+        ?? "Failed to submit rating.";
+      toast.error("Error", msg);
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  /* ── Computed filtered list ── */
+  const filteredBookings = bookings.filter((b) =>
+    b.barbershop?.name?.toLowerCase().includes(search.toLowerCase())
+  );
+
+  /* ── Render ── */
   return (
     <PageTransition>
-      <NavbarLayout user={user} notificationCount={2} onLogout={logout} />
+      <NavbarLayout user={user} onLogout={logout} />
 
-      {cancelTarget && (
-        <CancelModal
-          booking={cancelTarget}
-          onConfirm={handleCancelConfirm}
-          onClose={() => setCancelTarget(null)}
-        />
-      )}
+      <div className="min-h-screen bg-neutral-950 text-white pb-24 md:pb-0 pt-20">
+        <div className="max-w-3xl mx-auto px-4 py-8">
 
-      <div className="min-h-screen bg-zinc-950 text-white pb-20 md:pb-0">
-        <div className="container mx-auto px-4 sm:px-6 py-8 sm:py-12 max-w-6xl">
-
-          {/* ── Heading ── */}
-          <motion.h1
-            initial={{ opacity: 0, y: 12 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.4, ease: "easeOut" }}
-            className="text-3xl sm:text-4xl font-bold mb-6 sm:mb-8"
-          >
+          <h1 className="text-3xl font-bold mb-6">
             My <span className="text-amber-500">Bookings</span>
-          </motion.h1>
+          </h1>
 
-          {/* ── Search + Filter ── */}
-          <motion.div
-            initial={{ opacity: 0, y: 12 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.4, delay: 0.05, ease: "easeOut" }}
-            className="flex flex-col sm:flex-row gap-3 sm:gap-4 mb-7 sm:mb-10"
-          >
-            <div className="relative flex-1">
-              <Search size={16} className="absolute left-4 top-1/2 -translate-y-1/2 text-zinc-400" />
-              <input
-                value={search}
-                onChange={(e) => handleSearchChange(e.target.value)}
-                placeholder="Search booking..."
-                className="w-full pl-10 pr-4 py-3 text-sm bg-zinc-900 border border-zinc-800 rounded-xl focus:ring-2 focus:ring-amber-500 focus:outline-none"
-              />
-            </div>
-            <div className="flex items-center gap-2">
-              <Filter size={16} className="text-zinc-400 shrink-0" />
-              <select
-                value={filter}
-                onChange={(e) => handleFilterChange(e.target.value)}
-                className="flex-1 sm:flex-none bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-3 text-sm text-white focus:outline-none focus:ring-2 focus:ring-amber-500"
+          {/* ── Tabs ── */}
+          <div className="flex gap-2 mb-6">
+            {(["upcoming", "history"] as const).map((t) => (
+              <button
+                key={t}
+                onClick={() => setTab(t)}
+                className={`px-5 py-2 rounded-xl text-sm font-medium transition-colors ${
+                  tab === t
+                    ? "bg-amber-500 text-black"
+                    : "bg-neutral-900 text-neutral-400 hover:text-white border border-neutral-800"
+                }`}
               >
-                <option value="all">All</option>
-                <option value="upcoming">Upcoming</option>
-                <option value="completed">Completed</option>
-                <option value="cancelled">Cancelled</option>
-              </select>
+                {t === "upcoming" ? "Active" : "History"}
+              </button>
+            ))}
+          </div>
+
+          {/* ── Search ── */}
+          <div className="relative mb-6">
+            <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-neutral-500" />
+            <input
+              type="text"
+              placeholder="Search by barbershop name..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="w-full pl-9 pr-4 py-2.5 bg-neutral-900 border border-neutral-800 rounded-xl
+                text-white text-sm placeholder-neutral-500 focus:outline-none focus:border-amber-500"
+            />
+          </div>
+
+          {/* ── Content ── */}
+          {loading ? (
+            <div className="flex justify-center py-16">
+              <Loader2 className="animate-spin text-amber-400" size={32} />
             </div>
-          </motion.div>
+          ) : error ? (
+            <div className="flex items-center gap-2 text-red-400 py-8">
+              <AlertCircle size={18} /> {error}
+            </div>
+          ) : filteredBookings.length === 0 ? (
+            <div className="text-center py-16 text-neutral-500">
+              <Scissors size={40} className="mx-auto mb-3 opacity-40" />
+              <p>No booking {tab === "upcoming" ? "active" : "history"}.</p>
+              {tab === "upcoming" && (
+                <button
+                  onClick={() => navigate("/booking")}
+                  className="mt-4 px-5 py-2 bg-amber-500 text-black rounded-xl text-sm font-semibold hover:bg-amber-400 transition"
+                >
+                  Book Now
+                </button>
+              )}
+            </div>
+          ) : (
+            <AnimatePresence mode="popLayout">
+              <div className="space-y-4">
+                {filteredBookings.map((b) => {
+                  const cfg       = STATUS_CONFIG[b.status] ?? STATUS_CONFIG["cancelled"];
+                  const canCancel = b.status === "pending_payment" || b.status === "paid";
+                  const canPay    = b.status === "pending_payment" && !!b.payment?.snap_token;
 
-          {/* ── List ── */}
-          <AnimatePresence mode="wait">
-            <motion.div
-              key={`page-${currentPage}-${debouncedSearch}-${filter}`}
-              variants={listVariants}
-              initial="hidden"
-              animate="show"
-              exit={{ opacity: 0, y: -8, transition: { duration: 0.2 } }}
-              className="space-y-4 sm:space-y-6"
-            >
-              {paginated.map((b) => {
-                const psConfig  = PAYMENT_STATUS_CONFIG[b.paymentStatus];
-                const canPay    = CAN_PAY.has(b.paymentStatus);
-                const canCancel = CAN_CANCEL.has(b.paymentStatus);
-
-                return (
-                  <motion.div
-                    key={b.id}
-                    variants={itemVariants}
-                    className="bg-zinc-900 border border-zinc-800 rounded-2xl overflow-hidden hover:border-amber-500/40 transition"
-                  >
-                    <div className="flex flex-col sm:flex-row">
-                      {/* Image */}
-                      <div className="w-full sm:w-40 h-40 sm:h-auto shrink-0">
-                        <img src={b.image} alt={b.shopName} className="w-full h-full object-cover" />
+                  return (
+                    <motion.div
+                      key={b.id}
+                      layout
+                      initial={{ opacity: 0, y: 12 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0, y: -8 }}
+                      transition={{ duration: 0.2 }}
+                      className="bg-neutral-900 border border-neutral-800 rounded-2xl p-5 hover:border-amber-500/40 transition"
+                    >
+                      <div className="flex items-start justify-between gap-2 mb-3">
+                        <div className="flex items-center gap-3">
+                          {/* Logo barbershop */}
+                          <div className="w-11 h-11 rounded-xl bg-neutral-800 overflow-hidden shrink-0 flex items-center justify-center border border-neutral-700">
+                            {b.barbershop?.logo_url
+                              ? <img src={b.barbershop.logo_url} alt={b.barbershop.name} className="w-full h-full object-cover" />
+                              : <Scissors size={18} className="text-neutral-500" />}
+                          </div>
+                          <div>
+                            <p className="font-semibold text-white">
+                              {b.barbershop?.name ?? "Barbershop"}
+                            </p>
+                            <p className="text-sm text-neutral-400">
+                              {b.service?.name ?? "-"}
+                            </p>
+                          </div>
+                        </div>
+                        <span className={`px-3 py-1 text-xs font-semibold border rounded-full shrink-0 ${cfg.color}`}>
+                          {cfg.label}
+                        </span>
                       </div>
 
-                      {/* Content */}
-                      <div className="flex-1 p-4 sm:p-5">
-                        <div className="flex items-start justify-between gap-2 mb-2">
-                          <h3 className="text-base sm:text-xl font-bold">{b.shopName}</h3>
-                          <span className={`px-3 py-1 text-xs font-semibold border rounded-full capitalize shrink-0 ${STATUS_STYLES[b.status]}`}>
-                            {b.status}
-                          </span>
-                        </div>
+                      <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-neutral-400 mb-4">
+                        <span className="flex items-center gap-1">
+                          <Calendar size={11} /> {formatDate(b.booking_date)}
+                        </span>
+                        <span className="flex items-center gap-1">
+                          <Clock size={11} /> {b.start_time?.slice(0, 5)} – {b.end_time?.slice(0, 5)}
+                        </span>
+                        <span className="flex items-center gap-1">
+                          Barber: {b.barber?.user?.name ?? "-"}
+                        </span>
+                      </div>
 
-                        <div className="flex flex-wrap gap-x-4 gap-y-1.5 text-xs sm:text-sm text-zinc-400 mb-3">
-                          <span className="flex items-center gap-1"><MapPin   size={13} /> {b.location}</span>
-                          <span className="flex items-center gap-1"><Calendar size={13} /> {b.date}</span>
-                          <span className="flex items-center gap-1"><Clock    size={13} /> {b.time}</span>
-                          <span className="flex items-center gap-1"><Phone    size={13} /> {b.phone}</span>
-                        </div>
+                      <div className="flex items-center justify-between pt-3 border-t border-neutral-800">
+                        <span className="text-amber-400 font-bold">
+                          {formatPrice(b.total_price)}
+                        </span>
 
-                        <p className="text-zinc-300 text-sm mb-2">{b.service}</p>
-
-                        {b.rating && (
-                          <div className="flex items-center gap-1 text-amber-400 text-sm mb-3">
-                            <Star size={13} fill="currentColor" /> {b.rating}/5
-                          </div>
-                        )}
-
-                        <div className="flex items-center justify-between mt-3 pt-3 border-t border-zinc-800">
-                          {/* Price + payment status badge */}
-                          <div className="flex items-center gap-2 flex-wrap">
-                            <span className="text-amber-500 font-bold text-base sm:text-lg">{b.price}</span>
-                            <span className={`px-2 py-0.5 text-xs font-semibold rounded-full border ${psConfig.color}`}>
-                              {psConfig.label}
+                        <div className="flex gap-2">
+                          {canPay && (
+                            <button
+                              onClick={() => handleRepay(b)}
+                              disabled={paying === b.id}
+                              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg
+                                text-amber-400 border border-amber-400/30 bg-amber-400/5
+                                hover:bg-amber-400/15 hover:border-amber-400/60 transition disabled:opacity-50"
+                            >
+                              {paying === b.id
+                                ? <Loader2 size={13} className="animate-spin" />
+                                : <CreditCard size={13} />}
+                              Pay
+                            </button>
+                          )}
+                          {canCancel && (
+                            <button
+                              onClick={() => handleCancel(b)}
+                              disabled={cancelling === b.id}
+                              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg
+                                text-red-400 border border-red-400/30 bg-red-400/5
+                                hover:bg-red-400/15 hover:border-red-400/60 transition disabled:opacity-50"
+                            >
+                              {cancelling === b.id
+                                ? <Loader2 size={13} className="animate-spin" />
+                                : <X size={13} />}
+                              Cancel
+                            </button>
+                          )}
+                          {b.status === "done" && !b.rating && (
+                            <button
+                              onClick={() => { setRatingModal(b); setStarHover(0); setStarValue(0); setReviewText(""); }}
+                              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg
+                                text-amber-400 border border-amber-400/30 bg-amber-400/5
+                                hover:bg-amber-400/15 hover:border-amber-400/60 transition"
+                            >
+                              <Star size={13} /> Rate
+                            </button>
+                          )}
+                          {b.status === "done" && b.rating && (
+                            <span className="flex items-center gap-1 text-xs text-amber-400">
+                              {"★".repeat(b.rating.rating)} Rated
                             </span>
-                          </div>
-
-                          {/* Action buttons */}
-                          {(canPay || canCancel) && (
-                            <div className="flex items-center gap-2 shrink-0">
-                              {canPay && (
-                                <button
-                                  onClick={() => handlePay(b)}
-                                  className="flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs sm:text-sm font-medium
-                                    text-amber-400 border border-amber-400/30 bg-amber-400/5
-                                    hover:bg-amber-400/15 hover:border-amber-400/60 transition"
-                                >
-                                  <CreditCard size={14} />
-                                  Pay
-                                </button>
-                              )}
-                              {canCancel && (
-                                <button
-                                  onClick={() => setCancelTarget(b)}
-                                  className="flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs sm:text-sm font-medium
-                                    text-red-400 border border-red-400/30 bg-red-400/5
-                                    hover:bg-red-400/15 hover:border-red-400/60 transition"
-                                >
-                                  <X size={14} />
-                                  Cancel
-                                </button>
-                              )}
-                            </div>
                           )}
                         </div>
                       </div>
-                    </div>
-                  </motion.div>
-                );
-              })}
-
-              {/* Empty state */}
-              {filtered.length === 0 && (
-                <motion.div
-                  initial={{ opacity: 0, y: 12 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ duration: 0.3, ease: "easeOut" }}
-                  className="text-center py-14 sm:py-16"
-                >
-                  <p className="text-zinc-500 mb-4 text-sm sm:text-base">No booking history found</p>
-                  <button
-                    onClick={() => { handleSearchChange(""); handleFilterChange("all"); }}
-                    className="px-5 py-2.5 bg-zinc-800 border border-zinc-700 text-white rounded-xl hover:border-amber-500/50 transition text-sm"
-                  >
-                    Clear Filters
-                  </button>
-                </motion.div>
-              )}
-            </motion.div>
-          </AnimatePresence>
-
-          <Pagination
-            currentPage={currentPage}
-            totalPages={totalPages}
-            totalItems={filtered.length}
-            itemsPerPage={ITEMS_PER_PAGE}
-            onPageChange={handlePageChange}
-          />
+                    </motion.div>
+                  );
+                })}
+              </div>
+            </AnimatePresence>
+          )}
         </div>
       </div>
+
+      {ratingModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 px-4">
+          <motion.div
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            className="bg-neutral-900 border border-neutral-800 rounded-2xl p-6 w-full max-w-sm"
+          >
+            <h3 className="text-lg font-bold text-white mb-1">Rate Your Experience</h3>
+            <p className="text-sm text-neutral-400 mb-5">
+              {ratingModal.barbershop?.name}
+            </p>
+
+            <div className="flex gap-2 mb-5 justify-center">
+              {[1, 2, 3, 4, 5].map((n) => (
+                <button
+                  key={n}
+                  onMouseEnter={() => setStarHover(n)}
+                  onMouseLeave={() => setStarHover(0)}
+                  onClick={() => setStarValue(n)}
+                >
+                  <Star
+                    size={36}
+                    className={`transition-colors ${
+                      n <= (starHover || starValue)
+                        ? "text-amber-400 fill-amber-400"
+                        : "text-neutral-700"
+                    }`}
+                  />
+                </button>
+              ))}
+            </div>
+
+            <textarea
+              rows={3}
+              placeholder="Write a review (optional)..."
+              value={reviewText}
+              onChange={(e) => setReviewText(e.target.value)}
+              className="w-full px-3 py-2 bg-neutral-800 border border-neutral-700 rounded-xl text-white text-sm
+                placeholder-neutral-500 focus:outline-none focus:border-amber-500 resize-none mb-4"
+            />
+
+            <div className="flex gap-2">
+              <button
+                onClick={() => setRatingModal(null)}
+                className="flex-1 py-2.5 rounded-xl text-sm text-neutral-400 border border-neutral-700 hover:text-white transition"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleSubmitRating}
+                disabled={starValue === 0 || submitting}
+                className="flex-1 py-2.5 rounded-xl text-sm font-semibold bg-amber-500 hover:bg-amber-400 text-black transition disabled:opacity-50"
+              >
+                {submitting ? "Submitting..." : "Submit"}
+              </button>
+            </div>
+          </motion.div>
+        </div>
+      )}
+
+      {/* ════ Cancel Confirmation Modal ════ */}
+      {cancelTarget && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 px-4">
+          <motion.div
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            className="bg-neutral-900 border border-neutral-800 rounded-2xl p-6 w-full max-w-sm"
+          >
+            <div className="flex justify-center mb-4">
+              <div className="w-14 h-14 rounded-full bg-red-500/15 flex items-center justify-center">
+                <X size={28} className="text-red-400" />
+              </div>
+            </div>
+            <h3 className="text-lg font-bold text-white text-center mb-1">Cancel Booking?</h3>
+            <p className="text-sm text-neutral-400 text-center mb-5">
+              Are you sure you want to cancel your booking at{" "}
+              <span className="text-white font-medium">{cancelTarget.barbershop?.name}</span>?
+              This action cannot be undone.
+            </p>
+            <div className="flex gap-3">
+              <button
+                onClick={() => setCancelTarget(null)}
+                className="flex-1 py-2.5 rounded-xl text-sm text-neutral-300 border border-neutral-700 hover:text-white transition"
+              >
+                Keep Booking
+              </button>
+              <button
+                onClick={confirmCancel}
+                className="flex-1 py-2.5 rounded-xl text-sm font-semibold bg-red-500 hover:bg-red-400 text-white transition"
+              >
+                Yes, Cancel
+              </button>
+            </div>
+          </motion.div>
+        </div>
+      )}
 
       <BottomNav menuItems={customerMenu} user={user} onLogout={logout} />
     </PageTransition>

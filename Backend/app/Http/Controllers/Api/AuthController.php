@@ -51,10 +51,8 @@ class AuthController extends BaseController
         if (!request()->has('code')) {
             $this->logLogin(null, null, 'failed', 'Google login cancelled', request());
 
-            return response()->json([
-                'success' => false,
-                'message' => 'Login cancelled by user'
-            ], 400);
+            $frontendUrl = env('FRONTEND_URL', 'http://localhost:5173');
+            return redirect("{$frontendUrl}/login?error=google_failed");
         }
 
         $googleUser = Socialite::driver('google')->stateless()->user();
@@ -62,10 +60,8 @@ class AuthController extends BaseController
         $user = User::where('email', $googleUser->email)->first();
 
         if ($user && $user->status !== 'active') {
-            return response()->json([
-                'success' => false,
-                'message' => 'Account is '.$user->status
-            ], 403);
+            $frontendUrl = env('FRONTEND_URL', 'http://localhost:5173');
+            return redirect("{$frontendUrl}/login?error=account_{$user->status}");
         }
 
         if ($user) {
@@ -118,11 +114,12 @@ class AuthController extends BaseController
             request()
         );
 
-        return response()->json([
-            'access_token' => $accessToken,
+        $frontendUrl = env('FRONTEND_URL', 'http://localhost:5173');
+        $query = http_build_query([
+            'access_token'  => $accessToken,
             'refresh_token' => $refreshToken,
-            'token_type' => 'Bearer'
         ]);
+        return redirect("{$frontendUrl}/auth/google/callback?{$query}");
     }
 
     /**
